@@ -10,6 +10,7 @@ class Controller(QObject):
         self._view = None
         self._doc = None
         self._tool = None
+        self._grid = 5000
         # properties
         self.view = view
         self.doc = doc
@@ -23,6 +24,10 @@ class Controller(QObject):
         self.view.sigMouseClicked.connect(self._tool.onMouseClicked)
         self._tool.sigUpdate.connect(self.sigUpdate)
 
+    def snapPt(self, pt: QPoint):
+        g = self.grid
+        return QPoint(int(round(float(pt.x())/g))*g, int(round(float(pt.y())/g))*g)
+
     @property
     def view(self):
         return self._view
@@ -32,6 +37,15 @@ class Controller(QObject):
         self._view = view
         self.sigUpdate.connect(self._view.slotUpdate)
         self._installTool(LineTool(self))
+
+    @property
+    def grid(self):
+        return self._grid
+
+    @grid.setter
+    def grid(self, value):
+        self._grid = value
+        self.sigUpdate.emit()
 
     @property
     def doc(self):

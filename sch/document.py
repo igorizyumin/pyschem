@@ -53,7 +53,7 @@ class Document(QObject):
 
     @pyqtSlot()
     def redo(self):
-        self._undoStack.undo()
+        self._undoStack.redo()
         self.sigChanged.emit()
 
 

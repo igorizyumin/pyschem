@@ -30,7 +30,7 @@ class LineTool(QObject):
 
     @pyqtSlot('QMouseEvent', 'QPoint')
     def onMouseMoved(self, event, pos: QPoint):
-        self._pos = pos
+        self._pos = self._ctrl.snapPt(pos)
         if self._firstPt is not None:
             self.sigUpdate.emit()
 
@@ -39,7 +39,6 @@ class LineTool(QObject):
         if self._firstPt is None:
             self._firstPt = self._pos
         else:
-            print("Line: ({},{})->({},{})".format(self._firstPt.x(), self._firstPt.y(), self._pos.x(), self._pos.y()))
             self._ctrl.doc.doCommand(ObjAddCmd(LineObj(self._firstPt, self._pos)))
             self._firstPt = None
             self.sigUpdate.emit()

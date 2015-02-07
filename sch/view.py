@@ -4,6 +4,7 @@ from PyQt5.QtWidgets import *
 from sch.utils import Coord, Layer, LayerType
 from itertools import product
 
+
 class SchView(QWidget):
     # signals for controller to bind to
     sigMouseMoved = pyqtSignal('QMouseEvent', 'QPoint')
@@ -16,16 +17,11 @@ class SchView(QWidget):
         self._transform.translate(0, 0)
         # set to 100 px = 1 inch
         self._transform.scale(100.0/Coord.inchToSch(1), -100.0/Coord.inchToSch(1))
-        self._grid = Coord.mmToSch(5)
         self._mousePos = QPoint()
         self._wheelAngle = 0
         self._ctrl = None
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.StrongFocus)
-
-    def setGrid(self, grid):
-        self._grid = int(grid)
-        self.update()
 
     def setCtrl(self, ctrl):
         self._ctrl = ctrl
@@ -48,25 +44,23 @@ class SchView(QWidget):
             painter.setPen(pen)
             self._drawGrid(painter)
             # draw drawables
-            painter.setRenderHint(QPainter.Antialiasing)
+            #painter.setRenderHint(QPainter.Antialiasing)
             for d in self._ctrl.getDrawables():
                 d.draw(painter)
         painter.end()
 
     def _drawGrid(self, painter):
-        if self._transform.map(QLine(QPoint(0, 0), QPoint(self._grid, 0))).dx() <= 5:
+        g = self._ctrl.grid
+        if self._transform.map(QLine(QPoint(0, 0), QPoint(g, 0))).dx() <= 5:
             return  # grid points too close, don't draw grid
         viewport = self._transform.inverted()[0].mapRect(self.rect())
-        startX = int(viewport.x() / self._grid) * self._grid
-        startY = int(viewport.y() / self._grid) * self._grid
+        startX = int(viewport.x() / g) * g
+        startY = int(viewport.y() / g) * g
         endX = viewport.x() + viewport.width()
         endY = viewport.y() + viewport.height()
-        pts = QPolygon((QPoint(i[0], i[1]) for i in product(range(startX, endX, self._grid),
-                                                            range(startY, endY, self._grid))))
+        pts = QPolygon((QPoint(i[0], i[1]) for i in product(range(startX, endX, g),
+                                                            range(startY, endY, g))))
         painter.drawPoints(pts)
-#        for x in range(startX, endX, self._grid):
-#            for y in range(startY, endY, self._grid):
-#                painter.drawPoint(x, y)
 
     def zoom(self, factor, pos):
         self.recenter(pos)
