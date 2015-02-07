@@ -1,10 +1,14 @@
 from PyQt5.QtCore import *
-from PyQt5.QtGui import QTransform, QPainter, QPen, QBrush, QCursor
+from PyQt5.QtGui import QTransform, QPainter, QPen, QBrush, QCursor, QPolygon
 from PyQt5.QtWidgets import *
 from sch.utils import Coord, Layer, LayerType
-
+from itertools import product
 
 class SchView(QWidget):
+    # signals for controller to bind to
+    sigMouseMoved = pyqtSignal('QMouseEvent', 'QPoint')
+    sigMouseClicked = pyqtSignal()
+
     def __init__(self, parent=None):
         QWidget.__init__(self, parent)
         self._transform = QTransform()
@@ -15,12 +19,16 @@ class SchView(QWidget):
         self._grid = Coord.mmToSch(5)
         self._mousePos = QPoint()
         self._wheelAngle = 0
+        self._ctrl = None
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.StrongFocus)
 
     def setGrid(self, grid):
         self._grid = int(grid)
         self.update()
+
+    def setCtrl(self, ctrl):
+        self._ctrl = ctrl
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -29,8 +37,9 @@ class SchView(QWidget):
         painter.setClipping(True)
         painter.eraseRect(self.rect())
         # draw document
-        if True or self._doc is not None:
+        if self._ctrl is not None:
             # draw grid
+            painter.setRenderHint(QPainter.Antialiasing, False)
             pen = QPen(Layer.color(LayerType.grid))
             pen.setCapStyle(Qt.RoundCap)
             pen.setJoinStyle(Qt.RoundJoin)
@@ -38,6 +47,10 @@ class SchView(QWidget):
             painter.setTransform(self._transform)
             painter.setPen(pen)
             self._drawGrid(painter)
+            # draw drawables
+            painter.setRenderHint(QPainter.Antialiasing)
+            for d in self._ctrl.getDrawables():
+                d.draw(painter)
         painter.end()
 
     def _drawGrid(self, painter):
@@ -48,9 +61,12 @@ class SchView(QWidget):
         startY = int(viewport.y() / self._grid) * self._grid
         endX = viewport.x() + viewport.width()
         endY = viewport.y() + viewport.height()
-        for x in range(startX, endX, self._grid):
-            for y in range(startY, endY, self._grid):
-                painter.drawPoint(x, y)
+        pts = QPolygon((QPoint(i[0], i[1]) for i in product(range(startX, endX, self._grid),
+                                                            range(startY, endY, self._grid))))
+        painter.drawPoints(pts)
+#        for x in range(startX, endX, self._grid):
+#            for y in range(startY, endY, self._grid):
+#                painter.drawPoint(x, y)
 
     def zoom(self, factor, pos):
         self.recenter(pos)
@@ -63,7 +79,7 @@ class SchView(QWidget):
         self._transform.scale(factor, factor)
         self.recenter(p, True)
 
-    def recenter(self, pt, world = False):
+    def recenter(self, pt, world=False):
         ctr = self._transform.inverted()[0].map(self.rect().center())
         if not world:
             pt = self._transform.inverted()[0].map(pt)
@@ -75,11 +91,16 @@ class SchView(QWidget):
 
     def mouseMoveEvent(self, e):
         if e.buttons() & Qt.MidButton:
-            dl = QLine(QPoint(0,0), e.pos() - self._mousePos)
+            dl = QLine(QPoint(0, 0), e.pos() - self._mousePos)
             dl = self._transform.inverted()[0].map(dl)
             self._transform.translate(dl.dx(), dl.dy())
             self.update()
+        self.sigMouseMoved.emit(e, self._transform.inverted()[0].map(e.pos()))
         self._mousePos = e.pos()
+
+    def mouseReleaseEvent(self, e):
+        if e.button() == Qt.LeftButton:
+            self.sigMouseClicked.emit()
 
     def keyPressEvent(self, e):
         if e.key() == Qt.Key_Space:
@@ -101,3 +122,7 @@ class SchView(QWidget):
 
     def leaveEvent(self, e):
         self.clearFocus()
+
+    @pyqtSlot()
+    def slotUpdate(self):
+        self.update()
