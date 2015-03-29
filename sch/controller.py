@@ -1,5 +1,14 @@
 from PyQt5.QtCore import *
+from PyQt5.QtGui import QPainter
+from enum import Enum
+
+
 from sch.line import LineTool
+
+
+class ToolType(Enum):
+        SelectTool = 0
+        LineTool = 1
 
 
 class Controller(QObject):
@@ -36,7 +45,7 @@ class Controller(QObject):
     def view(self, view):
         self._view = view
         self.sigUpdate.connect(self._view.slotUpdate)
-        self._installTool(LineTool(self))
+        self._installTool(SelectTool(self))
 
     @property
     def grid(self):
@@ -61,3 +70,49 @@ class Controller(QObject):
         if self._tool is not None:
             out.append(self._tool)
         return out
+
+    @pyqtSlot(ToolType)
+    def changeTool(self, tool):
+        if tool == ToolType.LineTool:
+            self._installTool(LineTool(self))
+        elif tool == ToolType.SelectTool:
+            self._installTool(SelectTool(self))
+
+
+class SelectTool(QObject):
+    sigUpdate = pyqtSignal()
+
+    def __init__(self, ctrl):
+        QObject.__init__(self)
+        self._ctrl = ctrl
+        self._selection = []
+        self._lastFind = []
+
+    def draw(self, painter: QPainter):
+        for obj in self._selection:
+            painter.drawRect(obj.bbox())
+
+    @pyqtSlot('QMouseEvent', 'QPoint')
+    def onMouseMoved(self, event, pos: QPoint):
+        pass
+
+    @pyqtSlot('QPoint')
+    def onMouseClicked(self, pos):
+        objs = self._ctrl.doc.findObjsNear(pos, self._ctrl.view.hitRadius())
+        if len(objs) > 0:
+            # cycle through objects under cursor
+            if set(self._lastFind) == set(objs) and len(self._selection) == 1:
+                ind = self._lastFind.index(self._selection[0])+1
+                if ind >= len(self._lastFind):
+                    ind = 0
+                self._selection = [objs[ind]]
+
+            else:
+                self._lastFind = objs
+                self._selection = [objs[0]]
+            self.sigUpdate.emit()
+        else:
+            if self._selection:
+                self._selection = []
+                self._lastFind = []
+                self.sigUpdate.emit()

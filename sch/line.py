@@ -14,6 +14,10 @@ class LineObj(object):
     def bbox(self):
         return QRect(self.pt1, self.pt2).normalized()
 
+    def testHit(self, pt: QPoint, radius: int):
+        return self.bbox().intersects(QRect(QPoint(pt.x()-radius/2.0, pt.y()-radius/2.0),
+                                            QPoint(pt.x()+radius/2.0, pt.y()+radius/2.0)))
+
 
 class LineTool(QObject):
     sigUpdate = pyqtSignal()

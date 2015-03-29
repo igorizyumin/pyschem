@@ -8,7 +8,7 @@ from itertools import product
 class SchView(QWidget):
     # signals for controller to bind to
     sigMouseMoved = pyqtSignal('QMouseEvent', 'QPoint')
-    sigMouseClicked = pyqtSignal()
+    sigMouseClicked = pyqtSignal('QPoint')
 
     def __init__(self, parent=None):
         QWidget.__init__(self, parent)
@@ -44,7 +44,7 @@ class SchView(QWidget):
             painter.setPen(pen)
             self._drawGrid(painter)
             # draw drawables
-            #painter.setRenderHint(QPainter.Antialiasing)
+            # painter.setRenderHint(QPainter.Antialiasing)
             for d in self._ctrl.getDrawables():
                 d.draw(painter)
         painter.end()
@@ -94,7 +94,10 @@ class SchView(QWidget):
 
     def mouseReleaseEvent(self, e):
         if e.button() == Qt.LeftButton:
-            self.sigMouseClicked.emit()
+            self.sigMouseClicked.emit(self._transform.inverted()[0].map(e.pos()))
+
+    def hitRadius(self):
+        return self._transform.inverted()[0].m11()*5     # 5 pixels
 
     def keyPressEvent(self, e):
         if e.key() == Qt.Key_Space:

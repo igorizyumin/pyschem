@@ -30,8 +30,8 @@ class Document(QObject):
     def findObjsInRect(self, rect: QRect):
         out = []
         for obj in self._objs:
-            if rect.intersects(obj.bbox):
-                out.insert(obj)
+            if rect.intersects(obj.bbox()):
+                out.append(obj)
         return out
 
     def findObjsNear(self, pt: QPoint, dist=1):

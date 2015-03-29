@@ -1,8 +1,9 @@
-from PyQt5.QtCore import pyqtSlot
-from PyQt5.QtWidgets import QMainWindow
+from PyQt5.QtCore import pyqtSignal, pyqtSlot, Qt
+from PyQt5.QtWidgets import QMainWindow, QDockWidget
 from sch.uic.ui_mainwindow import Ui_MainWindow
+from sch.uic.ui_toolsdock import Ui_ToolsDock
 from sch.view import SchView
-from sch.controller import Controller
+from sch.controller import Controller, ToolType
 from sch.document import Document
 
 
@@ -20,6 +21,9 @@ class MainWindow(QMainWindow):
         self.doc.sigCanRedoChanged.connect(self.onCanRedoChanged)
         self.view.setCtrl(self.ctrl)
         self.setCentralWidget(self.view)
+        self.toolsDock = ToolsDock()
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.toolsDock)
+        self.toolsDock.toolChanged.connect(self.ctrl.changeTool)
 
     @pyqtSlot()
     def on_actionUndo_triggered(self):
@@ -36,3 +40,29 @@ class MainWindow(QMainWindow):
     @pyqtSlot('bool')
     def onCanRedoChanged(self, en):
         self.ui.actionRedo.setEnabled(en)
+
+
+class ToolsDock(QDockWidget):
+    toolChanged = pyqtSignal(ToolType)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.ui = Ui_ToolsDock()
+        self.ui.setupUi(self)
+
+    @pyqtSlot(ToolType)
+    def on_toolChanged(self, tool):
+        self.blockSignals(True)
+        if tool == ToolType.SelectTool:
+            self.ui.selectBtn.setChecked(True)
+        elif tool == ToolType.LineTool:
+            self.ui.lineBtn.setChecked(True)
+        self.blockSignals(False)
+
+    @pyqtSlot()
+    def on_selectBtn_clicked(self):
+        self.toolChanged.emit(ToolType.SelectTool)
+
+    @pyqtSlot()
+    def on_lineBtn_clicked(self):
+        self.toolChanged.emit(ToolType.LineTool)
