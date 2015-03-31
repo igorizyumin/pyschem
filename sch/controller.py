@@ -2,8 +2,7 @@ from PyQt5.QtCore import *
 from PyQt5.QtGui import QPainter
 from enum import Enum
 
-
-from sch.line import LineTool
+from sch.line import LineTool, LineObj, LineEditor
 
 
 class ToolType(Enum):
@@ -30,7 +29,7 @@ class Controller(QObject):
             return
         self._tool = tool
         self.view.sigMouseMoved.connect(self._tool.onMouseMoved)
-        self.view.sigMouseClicked.connect(self._tool.onMouseClicked)
+        self.view.sigMouseReleased.connect(self._tool.onMouseReleased)
         self._tool.sigUpdate.connect(self.sigUpdate)
 
     def snapPt(self, pt: QPoint):
@@ -87,17 +86,24 @@ class SelectTool(QObject):
         self._ctrl = ctrl
         self._selection = []
         self._lastFind = []
+        self._editor = None
 
     def draw(self, painter: QPainter):
+        if self._editor:
+            self._editor.draw(painter)
+            return
         for obj in self._selection:
             painter.drawRect(obj.bbox())
+
 
     @pyqtSlot('QMouseEvent', 'QPoint')
     def onMouseMoved(self, event, pos: QPoint):
         pass
 
     @pyqtSlot('QPoint')
-    def onMouseClicked(self, pos):
+    def onMouseReleased(self, pos):
+        if self._editor and self._editor.testHit(pos):
+            return
         objs = self._ctrl.doc.findObjsNear(pos, self._ctrl.view.hitRadius())
         if len(objs) > 0:
             # cycle through objects under cursor
@@ -116,3 +122,51 @@ class SelectTool(QObject):
                 self._selection = []
                 self._lastFind = []
                 self.sigUpdate.emit()
+        self.selectionChanged()
+
+    def selectionChanged(self):
+        self._editor = None
+        if len(self._selection) == 1 and type(self._selection[0]) is LineObj:
+            self._editor = LineEditor(self._ctrl, self._selection[0])
+            self._editor.sigUpdate.connect(self.sigUpdate)
+
+
+class EditHandle(QObject):
+    sigDragged = pyqtSignal('QPoint')
+    sigMoved = pyqtSignal('QPoint')
+
+    def __init__(self, ctrl, pos=QPoint()):
+        super().__init__()
+        self._ctrl = ctrl
+        self._pos = QPoint(pos)
+        self._dragging = False
+
+    def draw(self, painter: QPainter):
+        r = self._ctrl.view.hitRadius()
+        x, y = self._pos.x(), self._pos.y()
+        painter.drawRect(QRect(QPoint(x-r, y-r), QPoint(x+r, y+r)))
+
+    def testHit(self, pt: QPoint):
+        return (self._pos - self._ctrl.snapPt(pt)).manhattanLength() <= self._ctrl.view.hitRadius()
+
+    @pyqtSlot('QMouseEvent', 'QPoint')
+    def onMouseMoved(self, event, pos: QPoint):
+        if self._dragging:
+            self._pos = self._ctrl.snapPt(pos)
+            self.sigDragged.emit(self._pos)
+
+    @pyqtSlot('QPoint')
+    def onMousePressed(self, pos):
+        if self.testHit(pos):
+            self._dragging = True
+
+    @pyqtSlot('QPoint')
+    def onMouseReleased(self, pos):
+        if self._dragging:
+            self._dragging = False
+            self._pos = self._ctrl.snapPt(pos)
+            self.sigMoved.emit(self._pos)
+
+    @property
+    def pos(self):
+        return self._pos

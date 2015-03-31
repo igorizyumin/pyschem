@@ -8,7 +8,8 @@ from itertools import product
 class SchView(QWidget):
     # signals for controller to bind to
     sigMouseMoved = pyqtSignal('QMouseEvent', 'QPoint')
-    sigMouseClicked = pyqtSignal('QPoint')
+    sigMousePressed = pyqtSignal('QPoint')
+    sigMouseReleased = pyqtSignal('QPoint')
 
     def __init__(self, parent=None):
         QWidget.__init__(self, parent)
@@ -92,9 +93,13 @@ class SchView(QWidget):
         self.sigMouseMoved.emit(e, self._transform.inverted()[0].map(e.pos()))
         self._mousePos = e.pos()
 
+    def mousePressEvent(self, e):
+        if e.button() == Qt.LeftButton:
+            self.sigMousePressed.emit(self._transform.inverted()[0].map(e.pos()))
+
     def mouseReleaseEvent(self, e):
         if e.button() == Qt.LeftButton:
-            self.sigMouseClicked.emit(self._transform.inverted()[0].map(e.pos()))
+            self.sigMouseReleased.emit(self._transform.inverted()[0].map(e.pos()))
 
     def hitRadius(self):
         return self._transform.inverted()[0].m11()*5     # 5 pixels

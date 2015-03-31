@@ -1,6 +1,8 @@
 from PyQt5.QtCore import *
 from PyQt5.QtGui import QPainter
 from sch.document import ObjAddCmd
+import sch.controller
+# from sch.controller import EditHandle
 
 
 class LineObj(object):
@@ -39,10 +41,54 @@ class LineTool(QObject):
             self.sigUpdate.emit()
 
     @pyqtSlot()
-    def onMouseClicked(self):
+    def onMouseReleased(self):
         if self._firstPt is None:
             self._firstPt = self._pos
         else:
             self._ctrl.doc.doCommand(ObjAddCmd(LineObj(self._firstPt, self._pos)))
             self._firstPt = None
             self.sigUpdate.emit()
+
+
+class LineEditor(QObject):
+    sigUpdate = pyqtSignal()
+
+    def __init__(self, ctrl, obj):
+        super().__init__()
+        self._ctrl = ctrl
+        self._obj = obj
+        self._handles = [sch.controller.EditHandle(self._ctrl, obj.pt1), sch.controller.EditHandle(self._ctrl, obj.pt2)]
+        self._handles[0].sigDragged.connect(self._dragPt1)
+        self._handles[1].sigDragged.connect(self._dragPt2)
+        for h in self._handles:
+            h.sigMoved.connect(self._commit)
+            self._ctrl.view.sigMouseMoved.connect(h.onMouseMoved)
+            self._ctrl.view.sigMousePressed.connect(h.onMousePressed)
+            self._ctrl.view.sigMouseReleased.connect(h.onMouseReleased)
+
+    def testHit(self, pt):
+        for h in self._handles:
+            if h.testHit(pt):
+                return True
+        return False
+
+    def draw(self, painter):
+        for h in self._handles:
+            h.draw(painter)
+
+    @pyqtSlot('QPoint')
+    def _dragPt1(self, pos):
+        self._obj.pt1 = pos
+        self.sigUpdate.emit()
+
+    @pyqtSlot('QPoint')
+    def _dragPt2(self, pos):
+        self._obj.pt2 = pos
+        self.sigUpdate.emit()
+
+    @pyqtSlot('QPoint')
+    def _commit(self):
+        self._obj.pt1 = self._handles[0].pos
+        self._obj.pt2 = self._handles[1].pos
+        self.sigUpdate.emit()
+
