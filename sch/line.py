@@ -1,6 +1,6 @@
 from PyQt5.QtCore import *
 from PyQt5.QtGui import QPainter
-from sch.document import ObjAddCmd
+from sch.document import ObjAddCmd, ObjChangeCmd
 import sch.controller
 # from sch.controller import EditHandle
 
@@ -52,6 +52,7 @@ class LineTool(QObject):
 
 class LineEditor(QObject):
     sigUpdate = pyqtSignal()
+    sigDone = pyqtSignal()
 
     def __init__(self, ctrl, obj):
         super().__init__()
@@ -60,6 +61,8 @@ class LineEditor(QObject):
         self._handles = [sch.controller.EditHandle(self._ctrl, obj.pt1), sch.controller.EditHandle(self._ctrl, obj.pt2)]
         self._handles[0].sigDragged.connect(self._dragPt1)
         self._handles[1].sigDragged.connect(self._dragPt2)
+        self._ctrl.doc.sigChanged.connect(self._docChanged)
+        self._cmd = ObjChangeCmd(obj)
         for h in self._handles:
             h.sigMoved.connect(self._commit)
             self._ctrl.view.sigMouseMoved.connect(h.onMouseMoved)
@@ -90,5 +93,17 @@ class LineEditor(QObject):
     def _commit(self):
         self._obj.pt1 = self._handles[0].pos
         self._obj.pt2 = self._handles[1].pos
+        self._ctrl.doc.doCommand(self._cmd)
+        self._cmd = ObjChangeCmd(self._obj)
         self.sigUpdate.emit()
 
+    @pyqtSlot()
+    def _docChanged(self):
+        # if document changed, it might be because the object got deleted; update state
+        # check that object is still part of the document
+        if not self._ctrl.doc.hasObject(self._obj):
+            self.sigDone.emit()
+            return
+        # object still there, just update handle positions
+        self._handles[0].pos = self._obj.pt1
+        self._handles[1].pos = self._obj.pt2

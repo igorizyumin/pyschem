@@ -124,13 +124,21 @@ class SelectTool(QObject):
                 self.sigUpdate.emit()
         self.selectionChanged()
 
+    @pyqtSlot()
+    def releaseSelection(self):
+        self._selection.clear()
+        self.selectionChanged()
+
     def selectionChanged(self):
         self._editor = None
         if len(self._selection) == 1 and type(self._selection[0]) is LineObj:
             self._editor = LineEditor(self._ctrl, self._selection[0])
             self._editor.sigUpdate.connect(self.sigUpdate)
+            self._editor.sigDone.connect(self.releaseSelection)
 
 
+# TODO: use chain of responsibility here instead of signals/slots for events; translate keyboard/mouse events into abstract cursor motion, etc.
+# TODO: property inspector / editor
 class EditHandle(QObject):
     sigDragged = pyqtSignal('QPoint')
     sigMoved = pyqtSignal('QPoint')
@@ -170,3 +178,8 @@ class EditHandle(QObject):
     @property
     def pos(self):
         return self._pos
+
+    @pos.setter
+    def pos(self, newpos):
+        self._pos = newpos
+

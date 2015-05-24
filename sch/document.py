@@ -1,5 +1,6 @@
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import QUndoStack, QUndoCommand
+import copy
 
 
 class Document(QObject):
@@ -26,6 +27,9 @@ class Document(QObject):
 
     def objects(self):
         return list(self._objs)
+
+    def hasObject(self, obj):
+        return obj in self._objs
 
     def findObjsInRect(self, rect: QRect):
         out = []
@@ -77,3 +81,47 @@ class ObjAddCmd(QUndoCommand):
 
     def undo(self):
         self._doc.removeObj(self._obj)
+
+
+class ObjChangeCmd(QUndoCommand):
+    @staticmethod
+    def _Memento(obj, deep=False):
+        state = (copy.copy, copy.deepcopy)[bool(deep)](obj.__dict__)
+
+        def Restore():
+            obj.__dict__.clear()
+            obj.__dict__.update(state)
+        return Restore
+
+    # this should be called with the unmodified object, which is then changed
+    # during the transaction.  The command should be submitted when the object
+    # is in its final state.
+    def __init__(self, obj):
+        super().__init__()
+        self._doc = None
+        self._obj = obj
+        self._restore = ObjChangeCmd._Memento(obj)
+        self._undone = False
+
+    @property
+    def doc(self):
+        return self._doc
+
+    @doc.setter
+    def doc(self, doc):
+        self._doc = doc
+
+    def _restoreState(self):
+        # swap memento with object state
+        r = self._restore
+        self._restore = ObjChangeCmd._Memento(self._obj)
+        r()
+        self._undone = not self._undone
+
+    def redo(self):
+        if self._undone:
+            self._restoreState()
+
+    def undo(self):
+        if not self._undone:
+            self._restoreState()
