@@ -1,0 +1,155 @@
+# RELAX NG schema for pyschem file format
+start = (XSch)
+
+# basic types
+# boolean value
+Bool = ( "1" | "0" )
+# horizontal alignment
+AlignHorizAttr = (attribute hAlign { ("left" | "center" | "right") })
+# vertical alignment
+AlignVertAttr = (attribute vAlign { ("top" | "middle" | "bottom") })
+# unique universal identifier
+UuidStr = (xsd:string {length = "38"})
+Uuid = (element uuid { UuidStr })
+# dimension data type
+Dimension = (xsd:int {minInclusive = "0"})
+# object id type
+ObjID = (xsd:int {minInclusive = "0"})
+# coordinate data type
+Coord = (xsd:int)
+# x,y coordinate pair as attributes
+CoordsAttr = (attribute x { Coord }, attribute y { Coord } )
+# rotation; currently only 90 degree increments
+RotAttr = (attribute rot { "0" | "90" | "180" | "270" } )
+# mirroring along Y axis
+MirrorAttr = (attribute mirror { Bool })
+# arc direction attributes
+ArcDirAttr = (attribute dir { "cw" | "ccw" })
+# text position/rotation attributes
+TextPosAttr = (CoordsAttr, RotAttr, AlignHorizAttr, AlignVertAttr)
+# text formatting attributes
+TextFormatAttr = (attribute fontFamily { xsd:string }, attribute fontSize { Dimension })
+# line attributes
+LineAttr = (attribute weight { Dimension },
+            attribute x1 { Coord },
+            attribute y1 { Coord },
+            attribute x2 { Coord },
+            attribute y2 { Coord } )
+
+KeyValueProp = element prop {
+    attribute name { xsd:string },
+    xsd:string
+}
+
+# toplevel element
+XSch = element xSchematic
+{ 
+	Properties, Symbol, Pages
+}
+
+# Schematic cell properties
+Properties = element props 
+{
+    Uuid,
+    KeyValueProp*
+}
+
+# Symbol description
+Symbol = element symbol
+{
+    SymProps,
+	SymPart+
+}
+
+SymProps = element props
+{
+    KeyValueProp*,
+    PinMap*
+}
+
+# pin mapping -- maps logical pins to physical pins
+PinMap = element pinMap {
+    attribute name { xsd:string },
+    element map { attribute part { xsd:string }, attribute from { xsd:string }, attribute to { xsd:string } }+
+}
+
+SymPart = element symPart
+{
+    # identifies the sub-part
+    # note: can be a vector; (e.g. inv[1:6] for a 6x inverter)
+    attribute id { xsd:string },
+    SymObject*
+}
+
+SymObject = ( Line | Text | PropText | Pin )
+
+# Pin definition
+Pin = element pin
+{
+    # logical identifier (e.g. "in[3:0]" or "21" or "B3")
+    # identifiers can be either pin numbers or they can be logical names or buses
+    attribute id { xsd:string },
+    # annotation (e.g. "nRST"); can be formatted with Markdown
+    attribute desc { xsd:string },
+	CoordsAttr,
+	RotAttr,
+	# annotation and number label locations / visibility
+	element descText { PinTextAttrs },
+	element numText { PinTextAttrs }
+}
+
+PinTextAttrs = (TextPosAttr, attribute visible { Bool })
+
+Line = element line
+{
+    LineAttr
+}
+
+# static annotation text
+Text = element \text
+{
+    TextPosAttr,
+    TextFormatAttr,
+    xsd:string
+}
+
+# property text refers to a property (e.g. the ref des or value)
+PropText = element proptext
+{
+    TextPosAttr,
+    TextFormatAttr,
+    attribute visible { Bool }?,
+    attribute prop { xsd:string }
+}
+
+Pages = element pages { Page* }
+
+Page = element page
+{
+    attribute name { xsd:string },
+    element objects { SchObject* }
+}
+
+SchObject = ( Line | Text | Part | Net )
+
+Part = element part
+{
+    # UUID of master cell
+    attribute masterUuid { UuidStr },
+    # id of the sub-part (vector index is optional)
+    attribute partId { xsd:string },
+    CoordsAttr,
+    RotAttr,
+    MirrorAttr,
+    # prop text overrides
+    PropText*,
+    # attribute overrides
+    KeyValueProp*
+}
+
+Net = element net
+{
+    LineAttr,
+    PropText*,
+    KeyValueProp*
+}
