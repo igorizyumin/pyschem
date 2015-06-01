@@ -33,6 +33,13 @@ class MainWindow(QMainWindow):
         self.doc.sigCanRedoChanged.connect(self.onCanRedoChanged)
         self.fileName = None
 
+    def closeEvent(self, e):
+        if self.maybeSave():
+            e.accept()
+            super().closeEvent(e)
+        else:
+            e.ignore()
+
     @pyqtSlot()
     def on_actionUndo_triggered(self):
         self.doc.undo()
