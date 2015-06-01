@@ -2,7 +2,8 @@ from PyQt5.QtCore import *
 from PyQt5.QtWidgets import QUndoStack, QUndoCommand
 import copy
 from lxml import etree
-from uuid import uuid4
+from uuid import UUID, uuid4
+import sch.line
 
 
 class Document(QObject):
@@ -70,9 +71,32 @@ class Document(QObject):
         uuid.text = str(self._uuid)
         pages = etree.SubElement(root, "pages")
         page = etree.SubElement(pages, "page", name="Page1")
+        objs = etree.SubElement(page, "objects")
         for obj in self._objs:
-            obj.toXml(page)
+            obj.toXml(objs)
         return root
+
+    def loadFromFile(self, file):
+        with open("xml/schschema.rng", "rb") as f:
+            rngdoc = etree.parse(f)
+        rng = etree.RelaxNG(rngdoc)
+        with open(file, "rb") as f:
+            doc = etree.parse(f)
+        rng.assertValid(doc)
+        root = doc.getroot()
+        for child in root:
+            if child.tag == "props":
+                uuid = child.find("uuid")
+                self._uuid = UUID(uuid.text)
+            # TODO proper support for reading multiple pages
+            elif child.tag == "pages":
+                pg = child.find("page")
+                if pg is not None:
+                    objs = pg.find("objects")
+                    for obj in objs:
+                        if obj.tag == "line":
+                            self._objs.add(sch.line.LineObj.fromXml(obj))
+        self.sigChanged.emit()
 
     def saveToFile(self, file):
         root = self.toXml()

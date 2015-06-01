@@ -9,7 +9,7 @@ AlignHorizAttr = (attribute hAlign { ("left" | "center" | "right") })
 # vertical alignment
 AlignVertAttr = (attribute vAlign { ("top" | "middle" | "bottom") })
 # unique universal identifier
-UuidStr = (xsd:string {length = "38"})
+UuidStr = (xsd:string {length = "36"})
 Uuid = (element uuid { UuidStr })
 # dimension data type
 Dimension = (xsd:int {minInclusive = "0"})

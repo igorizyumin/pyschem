@@ -30,6 +30,13 @@ class LineObj(object):
                          x2=str(self.pt2.x()),
                          y2=str(self.pt2.y()))
 
+    @staticmethod
+    def fromXml(elem):
+        wt = int(elem.attrib["weight"])
+        p1 = QPoint(int(elem.attrib["x1"]), int(elem.attrib["y1"]))
+        p2 = QPoint(int(elem.attrib["x2"]), int(elem.attrib["y2"]))
+        return LineObj(p1, p2, wt)
+
 
 class LineTool(QObject):
     sigUpdate = pyqtSignal()

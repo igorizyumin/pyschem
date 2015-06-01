@@ -55,6 +55,14 @@ class MainWindow(QMainWindow):
             self.newDoc()
 
     @pyqtSlot()
+    def on_actionOpen_triggered(self):
+        if self.maybeSave():
+            fn = QFileDialog.getOpenFileName(self)[0]
+            if fn != "":
+                self.newDoc()
+                self.loadFile(fn)
+
+    @pyqtSlot()
     def on_actionSave_triggered(self):
         if not self.fileName:
             return self.on_actionSave_As_triggered()
@@ -83,10 +91,18 @@ class MainWindow(QMainWindow):
                 return False
         return True
 
+    def loadFile(self, fileName):
+        try:
+            self.doc.loadFromFile(fileName)
+            self.fileName = fileName
+            self.ui.statusbar.showMessage("File loaded", 5000)
+        except Exception as e:
+            self.ui.statusbar.showMessage("ERROR: {}: {}".format(str(type(e)), str(e)), 5000)
+
     def saveFile(self, fileName):
         self.doc.saveToFile(fileName)
         self.fileName = fileName
-        self.ui.statusbar.showMessage("File saved", 2000)
+        self.ui.statusbar.showMessage("File saved", 5000)
 
 
 class ToolsDock(QDockWidget):

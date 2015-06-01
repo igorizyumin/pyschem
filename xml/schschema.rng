@@ -1,0 +1,344 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<grammar xmlns="http://relaxng.org/ns/structure/1.0" datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+  <!-- RELAX NG schema for pyschem file format -->
+  <start>
+    <ref name="XSch"/>
+  </start>
+  <!--
+    basic types
+    boolean value
+  -->
+  <define name="Bool">
+    <choice>
+      <value>1</value>
+      <value>0</value>
+    </choice>
+  </define>
+  <!-- horizontal alignment -->
+  <define name="AlignHorizAttr">
+    <attribute name="hAlign">
+      <choice>
+        <value>left</value>
+        <value>center</value>
+        <value>right</value>
+      </choice>
+    </attribute>
+  </define>
+  <!-- vertical alignment -->
+  <define name="AlignVertAttr">
+    <attribute name="vAlign">
+      <choice>
+        <value>top</value>
+        <value>middle</value>
+        <value>bottom</value>
+      </choice>
+    </attribute>
+  </define>
+  <!-- unique universal identifier -->
+  <define name="UuidStr">
+    <data type="string">
+      <param name="length">36</param>
+    </data>
+  </define>
+  <define name="Uuid">
+    <element name="uuid">
+      <ref name="UuidStr"/>
+    </element>
+  </define>
+  <!-- dimension data type -->
+  <define name="Dimension">
+    <data type="int">
+      <param name="minInclusive">0</param>
+    </data>
+  </define>
+  <!-- object id type -->
+  <define name="ObjID">
+    <data type="int">
+      <param name="minInclusive">0</param>
+    </data>
+  </define>
+  <!-- coordinate data type -->
+  <define name="Coord">
+    <data type="int"/>
+  </define>
+  <!-- x,y coordinate pair as attributes -->
+  <define name="CoordsAttr">
+    <attribute name="x">
+      <ref name="Coord"/>
+    </attribute>
+    <attribute name="y">
+      <ref name="Coord"/>
+    </attribute>
+  </define>
+  <!-- rotation; currently only 90 degree increments -->
+  <define name="RotAttr">
+    <attribute name="rot">
+      <choice>
+        <value>0</value>
+        <value>90</value>
+        <value>180</value>
+        <value>270</value>
+      </choice>
+    </attribute>
+  </define>
+  <!-- mirroring along Y axis -->
+  <define name="MirrorAttr">
+    <attribute name="mirror">
+      <ref name="Bool"/>
+    </attribute>
+  </define>
+  <!-- arc direction attributes -->
+  <define name="ArcDirAttr">
+    <attribute name="dir">
+      <choice>
+        <value>cw</value>
+        <value>ccw</value>
+      </choice>
+    </attribute>
+  </define>
+  <!-- text position/rotation attributes -->
+  <define name="TextPosAttr">
+    <ref name="CoordsAttr"/>
+    <ref name="RotAttr"/>
+    <ref name="AlignHorizAttr"/>
+    <ref name="AlignVertAttr"/>
+  </define>
+  <!-- text formatting attributes -->
+  <define name="TextFormatAttr">
+    <attribute name="fontFamily">
+      <data type="string"/>
+    </attribute>
+    <attribute name="fontSize">
+      <ref name="Dimension"/>
+    </attribute>
+  </define>
+  <!-- line attributes -->
+  <define name="LineAttr">
+    <attribute name="weight">
+      <ref name="Dimension"/>
+    </attribute>
+    <attribute name="x1">
+      <ref name="Coord"/>
+    </attribute>
+    <attribute name="y1">
+      <ref name="Coord"/>
+    </attribute>
+    <attribute name="x2">
+      <ref name="Coord"/>
+    </attribute>
+    <attribute name="y2">
+      <ref name="Coord"/>
+    </attribute>
+  </define>
+  <define name="KeyValueProp">
+    <element name="prop">
+      <attribute name="name">
+        <data type="string"/>
+      </attribute>
+      <data type="string"/>
+    </element>
+  </define>
+  <!-- toplevel element -->
+  <define name="XSch">
+    <element name="xSchematic">
+      <ref name="Properties"/>
+      <optional>
+        <ref name="Symbol"/>
+      </optional>
+      <optional>
+        <ref name="Pages"/>
+      </optional>
+    </element>
+  </define>
+  <!-- Schematic cell properties -->
+  <define name="Properties">
+    <element name="props">
+      <ref name="Uuid"/>
+      <zeroOrMore>
+        <ref name="KeyValueProp"/>
+      </zeroOrMore>
+    </element>
+  </define>
+  <!-- Symbol description -->
+  <define name="Symbol">
+    <element name="symbol">
+      <ref name="SymProps"/>
+      <oneOrMore>
+        <ref name="SymPart"/>
+      </oneOrMore>
+    </element>
+  </define>
+  <define name="SymProps">
+    <element name="props">
+      <zeroOrMore>
+        <ref name="KeyValueProp"/>
+      </zeroOrMore>
+      <zeroOrMore>
+        <ref name="PinMap"/>
+      </zeroOrMore>
+    </element>
+  </define>
+  <!-- pin mapping - - maps logical pins to physical pins -->
+  <define name="PinMap">
+    <element name="pinMap">
+      <attribute name="name">
+        <data type="string"/>
+      </attribute>
+      <oneOrMore>
+        <element name="map">
+          <attribute name="part">
+            <data type="string"/>
+          </attribute>
+          <attribute name="from">
+            <data type="string"/>
+          </attribute>
+          <attribute name="to">
+            <data type="string"/>
+          </attribute>
+        </element>
+      </oneOrMore>
+    </element>
+  </define>
+  <define name="SymPart">
+    <element name="symPart">
+      <!--
+        identifies the sub-part
+        note: can be a vector; (e.g. inv[1:6] for a 6x inverter)
+      -->
+      <attribute name="id">
+        <data type="string"/>
+      </attribute>
+      <zeroOrMore>
+        <ref name="SymObject"/>
+      </zeroOrMore>
+    </element>
+  </define>
+  <define name="SymObject">
+    <choice>
+      <ref name="Line"/>
+      <ref name="Text"/>
+      <ref name="PropText"/>
+      <ref name="Pin"/>
+    </choice>
+  </define>
+  <!-- Pin definition -->
+  <define name="Pin">
+    <element name="pin">
+      <!--
+        logical identifier (e.g. "in[3:0]" or "21" or "B3")
+        identifiers can be either pin numbers or they can be logical names or buses
+      -->
+      <attribute name="id">
+        <data type="string"/>
+      </attribute>
+      <!-- annotation (e.g. "nRST"); can be formatted with Markdown -->
+      <attribute name="desc">
+        <data type="string"/>
+      </attribute>
+      <ref name="CoordsAttr"/>
+      <ref name="RotAttr"/>
+      <!-- annotation and number label locations / visibility -->
+      <element name="descText">
+        <ref name="PinTextAttrs"/>
+      </element>
+      <element name="numText">
+        <ref name="PinTextAttrs"/>
+      </element>
+    </element>
+  </define>
+  <define name="PinTextAttrs">
+    <ref name="TextPosAttr"/>
+    <attribute name="visible">
+      <ref name="Bool"/>
+    </attribute>
+  </define>
+  <define name="Line">
+    <element name="line">
+      <ref name="LineAttr"/>
+    </element>
+  </define>
+  <!-- static annotation text -->
+  <define name="Text">
+    <element name="text">
+      <ref name="TextPosAttr"/>
+      <ref name="TextFormatAttr"/>
+      <data type="string"/>
+    </element>
+  </define>
+  <!-- property text refers to a property (e.g. the ref des or value) -->
+  <define name="PropText">
+    <element name="proptext">
+      <ref name="TextPosAttr"/>
+      <ref name="TextFormatAttr"/>
+      <optional>
+        <attribute name="visible">
+          <ref name="Bool"/>
+        </attribute>
+      </optional>
+      <attribute name="prop">
+        <data type="string"/>
+      </attribute>
+    </element>
+  </define>
+  <define name="Pages">
+    <element name="pages">
+      <zeroOrMore>
+        <ref name="Page"/>
+      </zeroOrMore>
+    </element>
+  </define>
+  <define name="Page">
+    <element name="page">
+      <attribute name="name">
+        <data type="string"/>
+      </attribute>
+      <element name="objects">
+        <zeroOrMore>
+          <ref name="SchObject"/>
+        </zeroOrMore>
+      </element>
+    </element>
+  </define>
+  <define name="SchObject">
+    <choice>
+      <ref name="Line"/>
+      <ref name="Text"/>
+      <ref name="Part"/>
+      <ref name="Net"/>
+    </choice>
+  </define>
+  <define name="Part">
+    <element name="part">
+      <!-- UUID of master cell -->
+      <attribute name="masterUuid">
+        <ref name="UuidStr"/>
+      </attribute>
+      <!-- id of the sub-part (vector index is optional) -->
+      <attribute name="partId">
+        <data type="string"/>
+      </attribute>
+      <ref name="CoordsAttr"/>
+      <ref name="RotAttr"/>
+      <ref name="MirrorAttr"/>
+      <zeroOrMore>
+        <!-- prop text overrides -->
+        <ref name="PropText"/>
+      </zeroOrMore>
+      <zeroOrMore>
+        <!-- attribute overrides -->
+        <ref name="KeyValueProp"/>
+      </zeroOrMore>
+    </element>
+  </define>
+  <define name="Net">
+    <element name="net">
+      <ref name="LineAttr"/>
+      <zeroOrMore>
+        <ref name="PropText"/>
+      </zeroOrMore>
+      <zeroOrMore>
+        <ref name="KeyValueProp"/>
+      </zeroOrMore>
+    </element>
+  </define>
+</grammar>
