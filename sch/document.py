@@ -1,6 +1,8 @@
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import QUndoStack, QUndoCommand
 import copy
+from lxml import etree
+from uuid import uuid4
 
 
 class Document(QObject):
@@ -16,6 +18,7 @@ class Document(QObject):
         self._undoStack.canUndoChanged.connect(self.sigCanUndoChanged)
         self._undoStack.canRedoChanged.connect(self.sigCanRedoChanged)
         self._undoStack.cleanChanged.connect(self.sigCleanChanged)
+        self._uuid = uuid4()
 
     def isModified(self):
         return not self._undoStack.isClean()
@@ -59,6 +62,22 @@ class Document(QObject):
     def redo(self):
         self._undoStack.redo()
         self.sigChanged.emit()
+
+    def toXml(self):
+        root = etree.Element("xSchematic")
+        props = etree.SubElement(root, "props")
+        uuid = etree.SubElement(props, "uuid")
+        uuid.text = str(self._uuid)
+        pages = etree.SubElement(root, "pages")
+        page = etree.SubElement(pages, "page", name="Page1")
+        for obj in self._objs:
+            obj.toXml(page)
+        return root
+
+    def saveToFile(self, file):
+        root = self.toXml()
+        with open(file, "wb") as h:
+            h.write(etree.tostring(root, pretty_print=True))
 
 
 class ObjAddCmd(QUndoCommand):

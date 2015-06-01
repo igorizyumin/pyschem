@@ -1,5 +1,5 @@
 from PyQt5.QtCore import pyqtSignal, pyqtSlot, Qt
-from PyQt5.QtWidgets import QMainWindow, QDockWidget
+from PyQt5.QtWidgets import QMainWindow, QDockWidget, QMessageBox, QFileDialog
 from sch.uic.ui_mainwindow import Ui_MainWindow
 from sch.uic.ui_toolsdock import Ui_ToolsDock
 from sch.view import SchView
@@ -16,6 +16,7 @@ class MainWindow(QMainWindow):
         self.ui.actionRedo.setEnabled(False)
         self.view = SchView()
         self.doc = Document()
+        self.fileName = None
         self.ctrl = Controller(doc=self.doc, view=self.view)
         self.doc.sigCanUndoChanged.connect(self.onCanUndoChanged)
         self.doc.sigCanRedoChanged.connect(self.onCanRedoChanged)
@@ -24,6 +25,13 @@ class MainWindow(QMainWindow):
         self.toolsDock = ToolsDock()
         self.addDockWidget(Qt.LeftDockWidgetArea, self.toolsDock)
         self.toolsDock.toolChanged.connect(self.ctrl.changeTool)
+
+    def newDoc(self):
+        self.doc = Document()
+        self.ctrl.doc = self.doc
+        self.doc.sigCanUndoChanged.connect(self.onCanUndoChanged)
+        self.doc.sigCanRedoChanged.connect(self.onCanRedoChanged)
+        self.fileName = None
 
     @pyqtSlot()
     def on_actionUndo_triggered(self):
@@ -40,6 +48,45 @@ class MainWindow(QMainWindow):
     @pyqtSlot('bool')
     def onCanRedoChanged(self, en):
         self.ui.actionRedo.setEnabled(en)
+
+    @pyqtSlot()
+    def on_actionNew_triggered(self):
+        if self.maybeSave():
+            self.newDoc()
+
+    @pyqtSlot()
+    def on_actionSave_triggered(self):
+        if not self.fileName:
+            return self.on_actionSave_As_triggered()
+        else:
+            self.saveFile(self.fileName)
+            return True
+
+    @pyqtSlot()
+    def on_actionSave_As_triggered(self):
+        fn = QFileDialog.getSaveFileName(self)[0]
+        if fn == "":
+            return False
+        self.saveFile(fn)
+        return True
+
+    def maybeSave(self):
+        if self.doc.isModified():
+            r = QMessageBox.warning(self,
+                                    "pyschem",
+                                    "The document has been modified\n"
+                                    "Do you want to save your changes?",
+                                    QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel)
+            if r == QMessageBox.Save:
+                return self.on_actionSave_triggered()
+            elif r == QMessageBox.Cancel:
+                return False
+        return True
+
+    def saveFile(self, fileName):
+        self.doc.saveToFile(fileName)
+        self.fileName = fileName
+        self.ui.statusbar.showMessage("File saved", 2000)
 
 
 class ToolsDock(QDockWidget):

@@ -3,12 +3,14 @@ from PyQt5.QtGui import QPainter
 from sch.document import ObjAddCmd, ObjChangeCmd
 import sch.controller
 # from sch.controller import EditHandle
+from lxml import etree
 
 
 class LineObj(object):
-    def __init__(self, pt1=QPoint(0, 0), pt2=QPoint(1, 1)):
+    def __init__(self, pt1=QPoint(0, 0), pt2=QPoint(1, 1), weight=1):
         self.pt1 = QPoint(pt1)
         self.pt2 = QPoint(pt2)
+        self.weight = weight
 
     def draw(self, painter: QPainter):
         painter.drawLine(self.pt1, self.pt2)
@@ -19,6 +21,14 @@ class LineObj(object):
     def testHit(self, pt: QPoint, radius: int):
         return self.bbox().intersects(QRect(QPoint(pt.x()-radius/2.0, pt.y()-radius/2.0),
                                             QPoint(pt.x()+radius/2.0, pt.y()+radius/2.0)))
+
+    def toXml(self, parent):
+        etree.SubElement(parent, "line",
+                         weight=str(self.weight),
+                         x1=str(self.pt1.x()),
+                         y1=str(self.pt1.y()),
+                         x2=str(self.pt2.x()),
+                         y2=str(self.pt2.y()))
 
 
 class LineTool(QObject):
@@ -78,6 +88,7 @@ class LineEditor(QObject):
     def draw(self, painter):
         for h in self._handles:
             h.draw(painter)
+
 
     @pyqtSlot('QPoint')
     def _dragPt1(self, pos):

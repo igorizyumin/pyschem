@@ -63,6 +63,7 @@ class Controller(QObject):
     def doc(self, doc):
         self._doc = doc
         self._doc.sigChanged.connect(self.sigUpdate)
+        self.sigUpdate.emit()
 
     def getDrawables(self):
         out = self.doc.objects()

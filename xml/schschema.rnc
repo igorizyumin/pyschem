@@ -44,7 +44,7 @@ KeyValueProp = element prop {
 # toplevel element
 XSch = element xSchematic
 { 
-	Properties, Symbol, Pages
+	Properties, Symbol?, Pages?
 }
 
 # Schematic cell properties
