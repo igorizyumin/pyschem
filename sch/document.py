@@ -102,6 +102,7 @@ class Document(QObject):
         root = self.toXml()
         with open(file, "wb") as h:
             h.write(etree.tostring(root, pretty_print=True))
+        self._undoStack.setClean()
 
 
 class ObjAddCmd(QUndoCommand):
