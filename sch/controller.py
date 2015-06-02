@@ -18,6 +18,7 @@ class Controller(QObject):
         self._view = None
         self._doc = None
         self._tool = None
+        self._toolType = ToolType.SelectTool
         self._grid = 5000
         # properties
         self.view = view
@@ -35,6 +36,10 @@ class Controller(QObject):
     def snapPt(self, pt: QPoint):
         g = self.grid
         return QPoint(int(round(float(pt.x())/g))*g, int(round(float(pt.y())/g))*g)
+
+    @property
+    def toolType(self):
+        return self._toolType
 
     @property
     def view(self):
@@ -73,6 +78,7 @@ class Controller(QObject):
 
     @pyqtSlot(ToolType)
     def changeTool(self, tool):
+        self._toolType = tool
         if tool == ToolType.LineTool:
             self._installTool(LineTool(self))
         elif tool == ToolType.SelectTool:

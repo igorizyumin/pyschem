@@ -70,7 +70,7 @@ class MasterDocument(QObject):
         with open(file, "wb") as h:
             h.write(etree.tostring(root, pretty_print=True))
         for d in self._symbols+self._pages:
-            d.setClean()
+            d.undoStack.setClean()
         self.fileName = file
 
     def toXml(self, parentNode):

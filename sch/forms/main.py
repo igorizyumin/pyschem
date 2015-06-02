@@ -1,5 +1,5 @@
 from PyQt5.QtCore import pyqtSignal, pyqtSlot, Qt, QObject, QModelIndex
-from PyQt5.QtWidgets import QMainWindow, QDockWidget, QMessageBox, QFileDialog, QWidget
+from PyQt5.QtWidgets import QMainWindow, QDockWidget, QMessageBox, QFileDialog, QWidget, QVBoxLayout
 from sch.uic.ui_mainwindow import Ui_MainWindow
 from sch.uic.ui_toolsdock import Ui_ToolsDock
 from sch.uic.ui_projectdock import Ui_ProjectDock
@@ -7,6 +7,7 @@ from sch.view import SchView
 from sch.controller import Controller, ToolType
 from sch.document import MasterDocument, DocPage
 from sch.forms.treeutils import AbstractTreeNode, AbstractTreeModel
+
 
 class MainWindow(QMainWindow):
     tabUndo = pyqtSignal()
@@ -27,6 +28,8 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.LeftDockWidgetArea, self.toolsDock)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.projDock)
         self.docsChanged.connect(self.projDock.onDocsChanged)
+        self.projDock.openPage.connect(self.on_pageOpen)
+        self.activeTab = None
         # self.toolsDock.toolChanged.connect(self.ctrl.changeTool)
 
     def closeEvent(self, e):
@@ -37,7 +40,7 @@ class MainWindow(QMainWindow):
             e.ignore()
 
     def currentTab(self):
-        return None
+        return self.activeTab
 
     def currentDoc(self):
         return None
@@ -109,6 +112,33 @@ class MainWindow(QMainWindow):
     def on_actionSave_As_triggered(self):
         return self.saveAsDoc(self.currentDoc())
 
+    def installTab(self, newTab):
+        # disconnect signals from old tab
+        if self.activeTab is not None:
+            self.activeTab.undoChanged.disconnect(self.onTabUndoChanged)
+            self.toolsDock.toolChanged.disconnect(self.activeTab.ctrl.changeTool)
+        if newTab is not None:
+            # restore active tool
+            self.toolsDock.on_toolChanged(newTab.ctrl.toolType)
+            # connect signals
+            newTab.undoChanged.connect(self.onTabUndoChanged)
+            self.toolsDock.toolChanged.connect(newTab.ctrl.changeTool)
+            self.activeTab = newTab
+
+
+    @pyqtSlot(DocPage)
+    def on_pageOpen(self, page):
+        tab = PageTab(page)
+        self.installTab(tab)
+        self.ui.tabWidget.addTab(tab, page.name)
+
+    @pyqtSlot(int)
+    def on_tabWidget_currentChanged(self, idx):
+        tab = None
+        if idx >= 0:
+            tab = self.ui.tabWidget.widget(idx)
+        self.installTab(tab)
+
 
 class PageTab(QWidget):
     # args: can undo / can redo
@@ -116,12 +146,15 @@ class PageTab(QWidget):
 
     def __init__(self, doc: DocPage, parent=None):
         super().__init__(parent)
-        self.view = SchView(self)
+        self.view = SchView()
         self.doc = doc
         self.ctrl = Controller(doc=self.doc, view=self.view)
         self.view.setCtrl(self.ctrl)
-        self.doc.undoStack.sigCanUndoChanged.connect(self._onUndoChanged)
-        self.doc.undoStack.sigCanRedoChanged.connect(self._onUndoChanged)
+        self.doc.undoStack.canUndoChanged.connect(self._onUndoChanged)
+        self.doc.undoStack.canRedoChanged.connect(self._onUndoChanged)
+        layout = QVBoxLayout()
+        layout.addWidget(self.view)
+        self.setLayout(layout)
 
     @pyqtSlot(bool)
     def _onUndoChanged(self):
@@ -150,6 +183,7 @@ class ToolsDock(QDockWidget):
 
     @pyqtSlot(ToolType)
     def on_toolChanged(self, tool):
+        # print("tool changed: {}".format(tool))
         self.blockSignals(True)
         if tool == ToolType.SelectTool:
             self.ui.selectBtn.setChecked(True)
@@ -167,6 +201,8 @@ class ToolsDock(QDockWidget):
 
 
 class ProjectDock(QDockWidget):
+    openPage = pyqtSignal('QObject')
+
     class PageElement(object):
         def __init__(self, page):
             self.name = page.name
@@ -236,4 +272,5 @@ class ProjectDock(QDockWidget):
     def on_projectTree_doubleClicked(self, idx: QModelIndex):
         p = idx.data(Qt.UserRole)
         if p is not None:
-            print("Double click on {}".format(p.name))
+            # print("Double click on {}".format(p.name))
+            self.openPage.emit(p)
