@@ -6,27 +6,102 @@ from uuid import UUID, uuid4
 import sch.line
 
 
-class Document(QObject):
+class MasterDocument(QObject):
+    # indicates document structure has changed (NOT sub-documents; those have their own signals)
     sigChanged = pyqtSignal()
-    sigCleanChanged = pyqtSignal('bool')
-    sigCanUndoChanged = pyqtSignal('bool')
-    sigCanRedoChanged = pyqtSignal('bool')
+    sigCleanChanged = pyqtSignal()
 
     def __init__(self):
         QObject.__init__(self)
-        self._objs = set()
-        self._undoStack = QUndoStack()
-        self._undoStack.canUndoChanged.connect(self.sigCanUndoChanged)
-        self._undoStack.canRedoChanged.connect(self.sigCanRedoChanged)
-        self._undoStack.cleanChanged.connect(self.sigCleanChanged)
         self._uuid = uuid4()
+        self._symbols = []
+        self._pages = []
+        self.fileName = None
+
+    def name(self):
+        if self.fileName is not None:
+            fi = QFileInfo(self.fileName)
+            return fi.fileName()
+        else:
+            return "untitled.xsch"
+
+    @property
+    def symbols(self):
+        return self._symbols
+
+    @property
+    def pages(self):
+        return self._pages
 
     def isModified(self):
-        return not self._undoStack.isClean()
+        for d in self._symbols+self._pages:
+            if d.isModified():
+                return True
+        return False
+
+    def loadFromFile(self, file=None):
+        if file is None:
+            file = self.fileName
+        with open("xml/schschema.rng", "rb") as f:
+            rngdoc = etree.parse(f)
+        rng = etree.RelaxNG(rngdoc)
+        with open(file, "rb") as f:
+            doc = etree.parse(f)
+        rng.assertValid(doc)
+        root = doc.getroot()
+        for child in root:
+            if child.tag == "props":
+                uuid = child.find("uuid")
+                self._uuid = UUID(uuid.text)
+            elif child.tag == "pages":
+                for pg in child:
+                    newp = DocPage(self)
+                    newp.fromXml(pg)
+                    newp.sigChanged.connect(self.sigCleanChanged)
+                    self._pages.append(newp)
+        self.fileName = file
+        self.sigChanged.emit()
+
+    def saveToFile(self, file=None):
+        if file is None:
+            file = self.fileName
+        root = etree.Element("xSchematic")
+        self.toXml(root)
+        with open(file, "wb") as h:
+            h.write(etree.tostring(root, pretty_print=True))
+        for d in self._symbols+self._pages:
+            d.setClean()
+        self.fileName = file
+
+    def toXml(self, parentNode):
+        props = etree.SubElement(parentNode, "props")
+        uuid = etree.SubElement(props, "uuid")
+        uuid.text = str(self._uuid)
+        pages = etree.SubElement(parentNode, "pages")
+        for p in self._pages:
+            p.toXml(pages)
+
+
+class DocPage(QObject):
+    sigChanged = pyqtSignal()
+
+    def __init__(self, parent: MasterDocument):
+        QObject.__init__(self)
+        self._objs = set()
+        self._parent = parent
+        self.undoStack = QUndoStack()
+        self._name = "Page1"
+
+    @property
+    def name(self):
+        return self._name
+
+    def isModified(self):
+        return not self.undoStack.isClean()
 
     def doCommand(self, cmd):
         cmd.doc = self
-        self._undoStack.push(cmd)
+        self.undoStack.push(cmd)
         self.sigChanged.emit()
 
     def objects(self):
@@ -56,53 +131,26 @@ class Document(QObject):
 
     @pyqtSlot()
     def undo(self):
-        self._undoStack.undo()
+        self.undoStack.undo()
         self.sigChanged.emit()
 
     @pyqtSlot()
     def redo(self):
-        self._undoStack.redo()
+        self.undoStack.redo()
         self.sigChanged.emit()
 
-    def toXml(self):
-        root = etree.Element("xSchematic")
-        props = etree.SubElement(root, "props")
-        uuid = etree.SubElement(props, "uuid")
-        uuid.text = str(self._uuid)
-        pages = etree.SubElement(root, "pages")
-        page = etree.SubElement(pages, "page", name="Page1")
+    def fromXml(self, pageNode):
+        self._name = pageNode.attrib["name"]
+        objs = pageNode.find("objects")
+        for obj in objs:
+            if obj.tag == "line":
+                self._objs.add(sch.line.LineObj.fromXml(obj))
+
+    def toXml(self, parentNode):
+        page = etree.SubElement(parentNode, "page", name=self.name)
         objs = etree.SubElement(page, "objects")
         for obj in self._objs:
             obj.toXml(objs)
-        return root
-
-    def loadFromFile(self, file):
-        with open("xml/schschema.rng", "rb") as f:
-            rngdoc = etree.parse(f)
-        rng = etree.RelaxNG(rngdoc)
-        with open(file, "rb") as f:
-            doc = etree.parse(f)
-        rng.assertValid(doc)
-        root = doc.getroot()
-        for child in root:
-            if child.tag == "props":
-                uuid = child.find("uuid")
-                self._uuid = UUID(uuid.text)
-            # TODO proper support for reading multiple pages
-            elif child.tag == "pages":
-                pg = child.find("page")
-                if pg is not None:
-                    objs = pg.find("objects")
-                    for obj in objs:
-                        if obj.tag == "line":
-                            self._objs.add(sch.line.LineObj.fromXml(obj))
-        self.sigChanged.emit()
-
-    def saveToFile(self, file):
-        root = self.toXml()
-        with open(file, "wb") as h:
-            h.write(etree.tostring(root, pretty_print=True))
-        self._undoStack.setClean()
 
 
 class ObjAddCmd(QUndoCommand):
