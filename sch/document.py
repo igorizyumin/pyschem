@@ -33,6 +33,18 @@ class MasterDocument(QObject):
     def pages(self):
         return self._pages
 
+    def appendNewPage(self):
+        pageNames = [p.name for p in self._pages]
+        newp = DocPage(self)
+        newp.sigChanged.connect(self.sigCleanChanged)
+        # find unique name
+        idx = 1
+        while "Page{}".format(idx) in pageNames:
+            idx += 1
+        newp.name = "Page{}".format(idx)
+        self._pages.append(newp)
+        self.sigChanged.emit()
+
     def isModified(self):
         for d in self._symbols+self._pages:
             if d.isModified():
@@ -95,6 +107,15 @@ class DocPage(QObject):
     @property
     def name(self):
         return self._name
+
+    @name.setter
+    def name(self, n):
+        self._name = n
+        self.sigChanged.emit()
+
+    @property
+    def parentDoc(self):
+        return self._parent
 
     def isModified(self):
         return not self.undoStack.isClean()

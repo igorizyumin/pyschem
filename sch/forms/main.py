@@ -1,12 +1,11 @@
-from PyQt5.QtCore import pyqtSignal, pyqtSlot, Qt, QObject, QModelIndex
+from PyQt5.QtCore import pyqtSignal, pyqtSlot, Qt
 from PyQt5.QtWidgets import QMainWindow, QDockWidget, QMessageBox, QFileDialog, QWidget, QVBoxLayout
 from sch.uic.ui_mainwindow import Ui_MainWindow
 from sch.uic.ui_toolsdock import Ui_ToolsDock
-from sch.uic.ui_projectdock import Ui_ProjectDock
 from sch.view import SchView
 from sch.controller import Controller, ToolType
 from sch.document import MasterDocument, DocPage
-from sch.forms.treeutils import AbstractTreeNode, AbstractTreeModel
+from sch.forms.projectdock import ProjectDock
 
 
 class MainWindow(QMainWindow):
@@ -30,7 +29,6 @@ class MainWindow(QMainWindow):
         self.docsChanged.connect(self.projDock.onDocsChanged)
         self.projDock.openPage.connect(self.on_pageOpen)
         self.activeTab = None
-        # self.toolsDock.toolChanged.connect(self.ctrl.changeTool)
 
     def closeEvent(self, e):
         if self.saveAll():
@@ -43,6 +41,8 @@ class MainWindow(QMainWindow):
         return self.activeTab
 
     def currentDoc(self):
+        if self.currentTab() is not None:
+            return self.activeTab.doc.parentDoc
         return None
 
     def saveDoc(self, doc: MasterDocument):
@@ -105,6 +105,14 @@ class MainWindow(QMainWindow):
                 self.ui.statusbar.showMessage("Error loading document: {}: {}".format(str(type(e)), str(e)), 5000)
 
     @pyqtSlot()
+    def on_actionUndo_triggered(self):
+        self.currentTab().undo()
+
+    @pyqtSlot()
+    def on_actionRedo_triggered(self):
+        self.currentTab().redo()
+
+    @pyqtSlot()
     def on_actionSave_triggered(self):
         return self.saveDoc(self.currentDoc())
 
@@ -124,6 +132,9 @@ class MainWindow(QMainWindow):
             newTab.undoChanged.connect(self.onTabUndoChanged)
             self.toolsDock.toolChanged.connect(newTab.ctrl.changeTool)
             self.activeTab = newTab
+            self.onTabUndoChanged(newTab.canUndo(), newTab.canRedo())
+        else:
+            self.onTabUndoChanged(False, False)
 
 
     @pyqtSlot(DocPage)
@@ -200,77 +211,3 @@ class ToolsDock(QDockWidget):
         self.toolChanged.emit(ToolType.LineTool)
 
 
-class ProjectDock(QDockWidget):
-    openPage = pyqtSignal('QObject')
-
-    class PageElement(object):
-        def __init__(self, page):
-            self.name = page.name
-            self.page = page
-            self.subelements = []
-
-    class DocElement(QObject):
-        def __init__(self, doc: MasterDocument):
-            self._doc = doc
-            doc.sigChanged.connect(self.onDocChanged)
-            self.name = None
-            self.subelements = []
-            self.onDocChanged()
-
-        @pyqtSlot()
-        def onDocChanged(self):
-            self.name = self._doc.name()
-            self.subelements = []
-            for p in self._doc.pages:
-                self.subelements.append(ProjectDock.PageElement(p))
-
-    class Node(AbstractTreeNode):
-        def __init__(self, ref, parent, row):
-            self.ref = ref
-            super().__init__(parent, row)
-
-        def _getChildren(self):
-            return [ProjectDock.Node(elem, self, index)
-                    for index, elem in enumerate(self.ref.subelements)]
-
-    class Model(AbstractTreeModel):
-        def __init__(self, rootElements):
-            self.rootElements = rootElements
-            super().__init__()
-
-        def _getRootNodes(self):
-            return [ProjectDock.Node(elem, None, index)
-                    for index, elem in enumerate(self.rootElements)]
-
-        def columnCount(self, parent):
-            return 1
-
-        def data(self, index, role):
-            if not index.isValid():
-                return None
-            node = index.internalPointer()
-            if role == Qt.DisplayRole and index.column() == 0:
-                return node.ref.name
-            if role == Qt.UserRole and index.column() == 0:
-                if type(node.ref) == ProjectDock.PageElement:
-                    return node.ref.page
-            return None
-
-    def __init__(self, window, parent=None):
-        super().__init__(parent)
-        self.window = window
-        self.ui = Ui_ProjectDock()
-        self.ui.setupUi(self)
-        self.onDocsChanged()
-
-    @pyqtSlot()
-    def onDocsChanged(self):
-        self.ui.projectTree.setModel(ProjectDock.Model([ProjectDock.DocElement(d) for d in self.window.docs]))
-        self.ui.projectTree.expandAll()
-
-    @pyqtSlot(QModelIndex)
-    def on_projectTree_doubleClicked(self, idx: QModelIndex):
-        p = idx.data(Qt.UserRole)
-        if p is not None:
-            # print("Double click on {}".format(p.name))
-            self.openPage.emit(p)
