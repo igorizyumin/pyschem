@@ -165,7 +165,12 @@ class AbstractPage(QObject):
 
     def findObjsNear(self, pt: QPoint, dist=1):
         hitRect = QRect(pt.x()-dist/2, pt.y()-dist/2, dist, dist)
-        return self.findObjsInRect(hitRect)
+        inRect = self.findObjsInRect(hitRect)
+        out = []
+        for obj in inRect:
+            if obj.testHit(pt, dist):
+                out.append(obj)
+        return out
 
     def addObj(self, obj):
         self._objs.add(obj)

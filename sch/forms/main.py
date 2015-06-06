@@ -4,7 +4,7 @@ from sch.uic.ui_mainwindow import Ui_MainWindow
 from sch.uic.ui_toolsdock import Ui_ToolsDock
 from sch.view import SchView
 from sch.controller import Controller, ToolType
-from sch.document import MasterDocument, DocPage
+from sch.document import MasterDocument, AbstractPage
 from sch.forms.projectdock import ProjectDock
 
 
@@ -137,7 +137,7 @@ class MainWindow(QMainWindow):
             self.onTabUndoChanged(False, False)
 
 
-    @pyqtSlot(DocPage)
+    @pyqtSlot(AbstractPage)
     def on_pageOpen(self, page):
         tab = PageTab(page)
         self.installTab(tab)
@@ -155,7 +155,7 @@ class PageTab(QWidget):
     # args: can undo / can redo
     undoChanged = pyqtSignal(bool, bool)
 
-    def __init__(self, doc: DocPage, parent=None):
+    def __init__(self, doc: AbstractPage, parent=None):
         super().__init__(parent)
         self.view = SchView()
         self.doc = doc

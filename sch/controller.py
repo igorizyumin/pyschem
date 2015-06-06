@@ -157,7 +157,7 @@ class EditHandle(QObject):
         self._dragging = False
 
     def draw(self, painter: QPainter):
-        r = self._ctrl.view.hitRadius()
+        r = self._ctrl.view.hitRadius() * 0.7
         x, y = self._pos.x(), self._pos.y()
         painter.drawRect(QRect(QPoint(x-r, y-r), QPoint(x+r, y+r)))
 

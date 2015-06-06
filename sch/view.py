@@ -102,7 +102,7 @@ class SchView(QWidget):
             self.sigMouseReleased.emit(self._transform.inverted()[0].map(e.pos()))
 
     def hitRadius(self):
-        return self._transform.inverted()[0].m11()*5     # 5 pixels
+        return self._transform.inverted()[0].m11()*6     # 6 pixels
 
     def keyPressEvent(self, e):
         if e.key() == Qt.Key_Space:

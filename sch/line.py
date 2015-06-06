@@ -1,7 +1,8 @@
 from PyQt5.QtCore import *
-from PyQt5.QtGui import QPainter
+from PyQt5.QtGui import QPainter, QPen
 from sch.document import ObjAddCmd, ObjChangeCmd
 import sch.controller
+from sch.utils import LayerType, Layer, Geom
 # from sch.controller import EditHandle
 from lxml import etree
 
@@ -13,14 +14,18 @@ class LineObj(object):
         self.weight = weight
 
     def draw(self, painter: QPainter):
+        pen = QPen(Layer.color(LayerType.annotate))
+        pen.setCapStyle(Qt.RoundCap)
+        pen.setJoinStyle(Qt.RoundJoin)
+        pen.setWidth(0)
+        painter.setPen(pen)
         painter.drawLine(self.pt1, self.pt2)
 
     def bbox(self):
         return QRect(self.pt1, self.pt2).normalized()
 
     def testHit(self, pt: QPoint, radius: int):
-        return self.bbox().intersects(QRect(QPoint(pt.x()-radius/2.0, pt.y()-radius/2.0),
-                                            QPoint(pt.x()+radius/2.0, pt.y()+radius/2.0)))
+        return Geom.distPtToSegment(pt, self.pt1, self.pt2) <= radius
 
     def toXml(self, parent):
         etree.SubElement(parent, "line",
@@ -48,6 +53,11 @@ class LineTool(QObject):
         self._pos = QPoint()
 
     def draw(self, painter):
+        pen = QPen(Layer.color(LayerType.annotate))
+        pen.setCapStyle(Qt.RoundCap)
+        pen.setJoinStyle(Qt.RoundJoin)
+        pen.setWidth(0)
+        painter.setPen(pen)
         if self._firstPt is not None:
             painter.drawLine(self._firstPt, self._pos)
 
@@ -93,8 +103,14 @@ class LineEditor(QObject):
         return False
 
     def draw(self, painter):
+        pen = QPen(Layer.color(LayerType.selection))
+        pen.setCapStyle(Qt.RoundCap)
+        pen.setJoinStyle(Qt.RoundJoin)
+        pen.setWidth(0)
+        painter.setPen(pen)
         for h in self._handles:
             h.draw(painter)
+        painter.drawLine(self._obj.pt1, self._obj.pt2)
 
 
     @pyqtSlot('QPoint')
