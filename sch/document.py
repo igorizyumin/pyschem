@@ -1,9 +1,11 @@
+import copy
+from uuid import UUID, uuid4
+
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import QUndoStack, QUndoCommand
-import copy
 from lxml import etree
-from uuid import UUID, uuid4
-import sch.line
+
+import sch.obj.line
 
 
 class MasterDocument(QObject):
@@ -207,7 +209,7 @@ class DocPage(AbstractPage):
         objs = pageNode.find("objects")
         for obj in objs:
             if obj.tag == "line":
-                self._objs.add(sch.line.LineObj.fromXml(obj))
+                self._objs.add(sch.obj.line.LineObj.fromXml(obj))
 
     def toXml(self, parentNode):
         page = etree.SubElement(parentNode, "page", name=self.name)
@@ -226,7 +228,7 @@ class SymbolPage(AbstractPage):
         objs = symNode.find("objects")
         for obj in objs:
             if obj.tag == "line":
-                self._objs.add(sch.line.LineObj.fromXml(obj))
+                self._objs.add(sch.obj.line.LineObj.fromXml(obj))
 
     def toXml(self, parentNode):
         page = etree.SubElement(parentNode, "symPart", name=self.name)

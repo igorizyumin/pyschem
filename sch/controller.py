@@ -1,8 +1,9 @@
-from PyQt5.QtCore import *
-from PyQt5.QtGui import QPainter
 from enum import Enum
 
-from sch.line import LineTool, LineObj, LineEditor
+from PyQt5.QtCore import *
+from PyQt5.QtGui import QPainter
+
+from sch.obj.line import LineTool, LineObj, LineEditor
 
 
 class ToolType(Enum):
