@@ -77,8 +77,8 @@ SymPart = element symPart
 {
     # identifies the sub-part
     # note: can be a vector; (e.g. inv[1:6] for a 6x inverter)
-    attribute id { xsd:string },
-    SymObject*
+    attribute name { xsd:string },
+    element objects { SymObject* }
 }
 
 SymObject = ( Line | Text | PropText | Pin )

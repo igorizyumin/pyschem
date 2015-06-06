@@ -33,15 +33,27 @@ class MasterDocument(QObject):
     def pages(self):
         return self._pages
 
+    @staticmethod
+    def _uniqueName(names, prefix):
+        # find unique name
+        idx = 1
+        while prefix+str(idx) in names:
+            idx += 1
+        return prefix + str(idx)
+
+    def appendNewSymbol(self):
+        symNames = [s.name for s in self._symbols]
+        newp = SymbolPage(self)
+        newp.sigChanged.connect(self.sigCleanChanged)
+        newp.name = self._uniqueName(symNames, "symbol")
+        self._symbols.append(newp)
+        self.sigChanged.emit()
+
     def appendNewPage(self):
         pageNames = [p.name for p in self._pages]
         newp = DocPage(self)
         newp.sigChanged.connect(self.sigCleanChanged)
-        # find unique name
-        idx = 1
-        while "Page{}".format(idx) in pageNames:
-            idx += 1
-        newp.name = "Page{}".format(idx)
+        newp.name = self._uniqueName(pageNames, "Page")
         self._pages.append(newp)
         self.sigChanged.emit()
 
@@ -65,6 +77,13 @@ class MasterDocument(QObject):
             if child.tag == "props":
                 uuid = child.find("uuid")
                 self._uuid = UUID(uuid.text)
+            elif child.tag == "symbol":
+                for obj in child:
+                    if obj.tag == "symPart":
+                        newp = SymbolPage(self)
+                        newp.fromXml(obj)
+                        newp.sigChanged.connect(self.sigCleanChanged)
+                        self._symbols.append(newp)
             elif child.tag == "pages":
                 for pg in child:
                     newp = DocPage(self)
@@ -89,20 +108,26 @@ class MasterDocument(QObject):
         props = etree.SubElement(parentNode, "props")
         uuid = etree.SubElement(props, "uuid")
         uuid.text = str(self._uuid)
-        pages = etree.SubElement(parentNode, "pages")
-        for p in self._pages:
-            p.toXml(pages)
+        if self._symbols:
+            sym = etree.SubElement(parentNode, "symbol")
+            symProps = etree.SubElement(sym, "props")
+            for s in self._symbols:
+                s.toXml(sym)
+        if self._pages:
+            pages = etree.SubElement(parentNode, "pages")
+            for p in self._pages:
+                p.toXml(pages)
 
 
-class DocPage(QObject):
+class AbstractPage(QObject):
     sigChanged = pyqtSignal()
 
     def __init__(self, parent: MasterDocument):
-        QObject.__init__(self)
+        super().__init__()
         self._objs = set()
         self._parent = parent
         self.undoStack = QUndoStack()
-        self._name = "Page1"
+        self._name = "untitled"
 
     @property
     def name(self):
@@ -161,6 +186,18 @@ class DocPage(QObject):
         self.sigChanged.emit()
 
     def fromXml(self, pageNode):
+        raise NotImplementedError()
+
+    def toXml(self, parentNode):
+        raise NotImplementedError()
+
+
+class DocPage(AbstractPage):
+    def __init__(self, parent: MasterDocument):
+        super().__init__(parent)
+        self._name = "Page1"
+
+    def fromXml(self, pageNode):
         self._name = pageNode.attrib["name"]
         objs = pageNode.find("objects")
         for obj in objs:
@@ -169,6 +206,25 @@ class DocPage(QObject):
 
     def toXml(self, parentNode):
         page = etree.SubElement(parentNode, "page", name=self.name)
+        objs = etree.SubElement(page, "objects")
+        for obj in self._objs:
+            obj.toXml(objs)
+
+
+class SymbolPage(AbstractPage):
+    def __init__(self, parent: MasterDocument):
+        super().__init__(parent)
+        self._name = "symbol"
+
+    def fromXml(self, symNode):
+        self._name = symNode.attrib["name"]
+        objs = symNode.find("objects")
+        for obj in objs:
+            if obj.tag == "line":
+                self._objs.add(sch.line.LineObj.fromXml(obj))
+
+    def toXml(self, parentNode):
+        page = etree.SubElement(parentNode, "symPart", name=self.name)
         objs = etree.SubElement(page, "objects")
         for obj in self._objs:
             obj.toXml(objs)

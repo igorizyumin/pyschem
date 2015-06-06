@@ -205,12 +205,14 @@
         identifies the sub-part
         note: can be a vector; (e.g. inv[1:6] for a 6x inverter)
       -->
-      <attribute name="id">
+      <attribute name="name">
         <data type="string"/>
       </attribute>
-      <zeroOrMore>
-        <ref name="SymObject"/>
-      </zeroOrMore>
+      <element name="objects">
+        <zeroOrMore>
+          <ref name="SymObject"/>
+        </zeroOrMore>
+      </element>
     </element>
   </define>
   <define name="SymObject">

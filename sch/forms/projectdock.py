@@ -18,6 +18,16 @@ class ProjectDock(QDockWidget):
         def doc(self):
             return self.page.parentDoc
 
+    class SymElement(object):
+        def __init__(self, sym):
+            self.name = "Symbol: " + sym.name
+            self.page = sym
+            self.subelements = []
+
+        @property
+        def doc(self):
+            return self.page.parentDoc
+
     class DocElement(QObject):
         def __init__(self, doc: MasterDocument):
             super().__init__()
@@ -39,6 +49,8 @@ class ProjectDock(QDockWidget):
         def onDocChanged(self):
             self.name = self._doc.name()
             self.subelements = []
+            for s in self._doc.symbols:
+                self.subelements.append(ProjectDock.SymElement(s))
             for p in self._doc.pages:
                 self.subelements.append(ProjectDock.PageElement(p))
 
@@ -107,10 +119,18 @@ class ProjectDock(QDockWidget):
                 obj.doc.appendNewPage()
                 self.onDocsChanged()
 
+            def newSym():
+                obj.doc.appendNewSymbol()
+                self.onDocsChanged()
+
             addPageAction = QAction("Add page", None)
             addPageAction.triggered.connect(newPage)
+            addSymAction = QAction("Add symbol", None)
+            addSymAction.triggered.connect(newSym)
             rmPageAction = QAction("Delete page", None)
             menu.addAction(addPageAction)
+            menu.addAction(addSymAction)
+            menu.addSeparator()
             if obj.page is not None:
                 menu.addAction(rmPageAction)
         menu.exec(self.ui.projectTree.mapToGlobal(pt))
