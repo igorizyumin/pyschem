@@ -4,8 +4,8 @@ from uuid import UUID, uuid4
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import QUndoStack, QUndoCommand
 from lxml import etree
-
 import sch.obj.line
+import sch.obj.net
 
 
 class MasterDocument(QObject):
@@ -152,27 +152,20 @@ class AbstractPage(QObject):
         self.undoStack.push(cmd)
         self.sigChanged.emit()
 
-    def objects(self):
-        return list(self._objs)
+    def objects(self, objType=None):
+        if not objType:
+            return set(self._objs)
+        return {obj for obj in self._objs if type(obj) is objType}
 
     def hasObject(self, obj):
         return obj in self._objs
 
-    def findObjsInRect(self, rect: QRect):
-        out = []
-        for obj in self._objs:
-            if rect.intersects(obj.bbox()):
-                out.append(obj)
-        return out
+    def findObjsInRect(self, rect: QRect, objType=None):
+        return {obj for obj in self.objects(objType) if rect.intersects(obj.bbox())}
 
-    def findObjsNear(self, pt: QPoint, dist=1):
+    def findObjsNear(self, pt: QPoint, dist=1, objType=None):
         hitRect = QRect(pt.x()-dist/2, pt.y()-dist/2, dist, dist)
-        inRect = self.findObjsInRect(hitRect)
-        out = []
-        for obj in inRect:
-            if obj.testHit(pt, dist):
-                out.append(obj)
-        return out
+        return {obj for obj in self.findObjsInRect(hitRect, objType) if obj.testHit(pt, dist)}
 
     def addObj(self, obj):
         self._objs.add(obj)
@@ -210,6 +203,8 @@ class DocPage(AbstractPage):
         for obj in objs:
             if obj.tag == "line":
                 self._objs.add(sch.obj.line.LineObj.fromXml(obj))
+            if obj.tag == "net":
+                self._objs.add(sch.obj.net.NetObj.fromXml(obj))
 
     def toXml(self, parentNode):
         page = etree.SubElement(parentNode, "page", name=self.name)
@@ -238,9 +233,9 @@ class SymbolPage(AbstractPage):
 
 
 class ObjAddCmd(QUndoCommand):
-    def __init__(self, obj):
-        super().__init__()
-        self._doc = None
+    def __init__(self, obj, doc=None, parent=None):
+        super().__init__(parent)
+        self._doc = doc
         self._obj = obj
         self.setText('add {}'.format(type(obj).__name__))
 
@@ -259,6 +254,28 @@ class ObjAddCmd(QUndoCommand):
         self._doc.removeObj(self._obj)
 
 
+class ObjDelCmd(QUndoCommand):
+    def __init__(self, obj, doc=None, parent=None):
+        super().__init__(parent)
+        self._doc = doc
+        self._obj = obj
+        self.setText('delete {}'.format(type(obj).__name__))
+
+    @property
+    def doc(self):
+        return self._doc
+
+    @doc.setter
+    def doc(self, doc):
+        self._doc = doc
+
+    def redo(self):
+        self._doc.removeObj(self._obj)
+
+    def undo(self):
+        self._doc.addObj(self._obj)
+
+
 class ObjChangeCmd(QUndoCommand):
     @staticmethod
     def _Memento(obj, deep=False):
@@ -272,9 +289,9 @@ class ObjChangeCmd(QUndoCommand):
     # this should be called with the unmodified object, which is then changed
     # during the transaction.  The command should be submitted when the object
     # is in its final state.
-    def __init__(self, obj):
-        super().__init__()
-        self._doc = None
+    def __init__(self, obj, doc=None, parent=None):
+        super().__init__(parent)
+        self._doc = doc
         self._obj = obj
         self._restore = ObjChangeCmd._Memento(obj)
         self._undone = False

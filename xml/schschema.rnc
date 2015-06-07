@@ -35,6 +35,11 @@ LineAttr = (attribute weight { Dimension },
             attribute y1 { Coord },
             attribute x2 { Coord },
             attribute y2 { Coord } )
+# net attributes
+NetAttr = ( attribute x1 { Coord },
+            attribute y1 { Coord },
+            attribute x2 { Coord },
+            attribute y2 { Coord } )
 
 KeyValueProp = element prop {
     attribute name { xsd:string },
@@ -149,7 +154,7 @@ Part = element part
 
 Net = element net
 {
-    LineAttr,
+    NetAttr,
     PropText*,
     KeyValueProp*
 }

@@ -2,7 +2,7 @@
 
 # Form implementation generated from reading ui file 'ui/ToolsDock.ui'
 #
-# Created: Sat Mar 28 23:28:09 2015
+# Created: Sat Jun  6 00:15:46 2015
 #      by: PyQt5 UI code generator 5.2.1
 #
 # WARNING! All changes made in this file will be lost!
@@ -12,7 +12,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 class Ui_ToolsDock(object):
     def setupUi(self, ToolsDock):
         ToolsDock.setObjectName("ToolsDock")
-        ToolsDock.resize(98, 95)
+        ToolsDock.resize(98, 135)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
@@ -34,6 +34,12 @@ class Ui_ToolsDock(object):
         self.lineBtn.setFlat(False)
         self.lineBtn.setObjectName("lineBtn")
         self.verticalLayout.addWidget(self.lineBtn)
+        self.netBtn = QtWidgets.QPushButton(self.dockWidgetContents)
+        self.netBtn.setCheckable(True)
+        self.netBtn.setAutoExclusive(True)
+        self.netBtn.setFlat(False)
+        self.netBtn.setObjectName("netBtn")
+        self.verticalLayout.addWidget(self.netBtn)
         spacerItem = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
         self.verticalLayout.addItem(spacerItem)
         ToolsDock.setWidget(self.dockWidgetContents)
@@ -46,4 +52,5 @@ class Ui_ToolsDock(object):
         ToolsDock.setWindowTitle(_translate("ToolsDock", "Tools"))
         self.selectBtn.setText(_translate("ToolsDock", "Select"))
         self.lineBtn.setText(_translate("ToolsDock", "Draw Line"))
+        self.netBtn.setText(_translate("ToolsDock", "Draw Net"))
 

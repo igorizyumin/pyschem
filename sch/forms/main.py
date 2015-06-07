@@ -210,4 +210,8 @@ class ToolsDock(QDockWidget):
     def on_lineBtn_clicked(self):
         self.toolChanged.emit(ToolType.LineTool)
 
+    @pyqtSlot()
+    def on_netBtn_clicked(self):
+        self.toolChanged.emit(ToolType.NetTool)
+
 

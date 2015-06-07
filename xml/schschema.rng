@@ -130,6 +130,21 @@
       <ref name="Coord"/>
     </attribute>
   </define>
+  <!-- net attributes -->
+  <define name="NetAttr">
+    <attribute name="x1">
+      <ref name="Coord"/>
+    </attribute>
+    <attribute name="y1">
+      <ref name="Coord"/>
+    </attribute>
+    <attribute name="x2">
+      <ref name="Coord"/>
+    </attribute>
+    <attribute name="y2">
+      <ref name="Coord"/>
+    </attribute>
+  </define>
   <define name="KeyValueProp">
     <element name="prop">
       <attribute name="name">
@@ -334,7 +349,7 @@
   </define>
   <define name="Net">
     <element name="net">
-      <ref name="LineAttr"/>
+      <ref name="NetAttr"/>
       <zeroOrMore>
         <ref name="PropText"/>
       </zeroOrMore>

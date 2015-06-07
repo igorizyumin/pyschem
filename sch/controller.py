@@ -4,11 +4,13 @@ from PyQt5.QtCore import *
 from PyQt5.QtGui import QPainter
 
 from sch.obj.line import LineTool, LineObj, LineEditor
+import sch.obj.net
 
 
 class ToolType(Enum):
         SelectTool = 0
         LineTool = 1
+        NetTool = 2
 
 
 class Controller(QObject):
@@ -72,7 +74,12 @@ class Controller(QObject):
         self.sigUpdate.emit()
 
     def getDrawables(self):
-        out = self.doc.objects()
+        class JunctionDrawable:
+            @staticmethod
+            def draw(painter):
+                sch.obj.net.NetObj.drawJunctions(self.doc, painter)
+        out = list(self.doc.objects())
+        out.append(JunctionDrawable())
         if self._tool is not None:
             out.append(self._tool)
         return out
@@ -82,6 +89,8 @@ class Controller(QObject):
         self._toolType = tool
         if tool == ToolType.LineTool:
             self._installTool(LineTool(self))
+        elif tool == ToolType.NetTool:
+            self._installTool(sch.obj.net.NetTool(self))
         elif tool == ToolType.SelectTool:
             self._installTool(SelectTool(self))
 
@@ -112,7 +121,7 @@ class SelectTool(QObject):
     def onMouseReleased(self, pos):
         if self._editor and self._editor.testHit(pos):
             return
-        objs = self._ctrl.doc.findObjsNear(pos, self._ctrl.view.hitRadius())
+        objs = list(self._ctrl.doc.findObjsNear(pos, self._ctrl.view.hitRadius()))
         if len(objs) > 0:
             # cycle through objects under cursor
             if set(self._lastFind) == set(objs) and len(self._selection) == 1:
@@ -141,6 +150,10 @@ class SelectTool(QObject):
         self._editor = None
         if len(self._selection) == 1 and type(self._selection[0]) is LineObj:
             self._editor = LineEditor(self._ctrl, self._selection[0])
+            self._editor.sigUpdate.connect(self.sigUpdate)
+            self._editor.sigDone.connect(self.releaseSelection)
+        elif len(self._selection) == 1 and type(self._selection[0]) is sch.obj.net.NetObj:
+            self._editor = sch.obj.net.NetEditor(self._ctrl, self._selection[0])
             self._editor.sigUpdate.connect(self.sigUpdate)
             self._editor.sigDone.connect(self.releaseSelection)
 

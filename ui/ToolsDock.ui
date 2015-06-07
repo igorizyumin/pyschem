@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>98</width>
-    <height>95</height>
+    <height>135</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -41,6 +41,22 @@
      <widget class="QPushButton" name="lineBtn">
       <property name="text">
        <string>Draw Line</string>
+      </property>
+      <property name="checkable">
+       <bool>true</bool>
+      </property>
+      <property name="autoExclusive">
+       <bool>true</bool>
+      </property>
+      <property name="flat">
+       <bool>false</bool>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QPushButton" name="netBtn">
+      <property name="text">
+       <string>Draw Net</string>
       </property>
       <property name="checkable">
        <bool>true</bool>
