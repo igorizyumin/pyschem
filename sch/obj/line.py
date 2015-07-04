@@ -3,7 +3,6 @@ from PyQt5.QtGui import QPainter, QPen
 from sch.document import ObjAddCmd, ObjChangeCmd
 import sch.controller
 from sch.utils import LayerType, Layer, Geom
-# from sch.controller import EditHandle
 from lxml import etree
 
 
@@ -52,6 +51,10 @@ class LineTool(QObject):
         self._firstPt = None
         self._pos = QPoint()
 
+    def finish(self):
+        self._firstPt = None
+        self.sigUpdate.emit()
+
     def draw(self, painter):
         pen = QPen(Layer.color(LayerType.annotate))
         pen.setCapStyle(Qt.RoundCap)
@@ -61,18 +64,20 @@ class LineTool(QObject):
         if self._firstPt is not None:
             painter.drawLine(self._firstPt, self._pos)
 
-    @pyqtSlot('QMouseEvent', 'QPoint')
-    def onMouseMoved(self, event, pos: QPoint):
-        self._pos = self._ctrl.snapPt(pos)
-        if self._firstPt is not None:
-            self.sigUpdate.emit()
-
-    @pyqtSlot()
-    def onMouseReleased(self):
-        if self._firstPt is None:
-            self._firstPt = self._pos
-        else:
-            self._ctrl.doc.doCommand(ObjAddCmd(LineObj(self._firstPt, self._pos)))
+    @pyqtSlot('PyQt_PyObject')
+    def onEvent(self, e):
+        if e.evType == sch.controller.Event.Type.MouseMoved:
+            self._pos = self._ctrl.snapPt(e.pos)
+            if self._firstPt is not None:
+                self.sigUpdate.emit()
+        elif e.evType == sch.controller.Event.Type.MouseReleased:
+            if self._firstPt is None:
+                self._firstPt = self._pos
+            else:
+                self._ctrl.doc.doCommand(ObjAddCmd(LineObj(self._firstPt, self._pos)))
+                self._firstPt = None
+                self.sigUpdate.emit()
+        elif e.evType == sch.controller.Event.Type.Cancel:
             self._firstPt = None
             self.sigUpdate.emit()
 

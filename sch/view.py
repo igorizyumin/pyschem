@@ -1,5 +1,5 @@
 from PyQt5.QtCore import *
-from PyQt5.QtGui import QTransform, QPainter, QPen, QBrush, QCursor, QPolygon
+from PyQt5.QtGui import QTransform, QPainter, QPen, QBrush, QCursor, QPolygon, QKeyEvent
 from PyQt5.QtWidgets import *
 from sch.utils import Coord, Layer, LayerType
 from itertools import product
@@ -10,6 +10,8 @@ class SchView(QWidget):
     sigMouseMoved = pyqtSignal('QMouseEvent', 'QPoint')
     sigMousePressed = pyqtSignal('QPoint')
     sigMouseReleased = pyqtSignal('QPoint')
+    sigKeyPressed = pyqtSignal('QKeyEvent')
+    sigKeyReleased = pyqtSignal('QKeyEvent')
 
     def __init__(self, parent=None):
         QWidget.__init__(self, parent)
@@ -74,7 +76,9 @@ class SchView(QWidget):
         self._transform.scale(factor, factor)
         self.recenter(p, True)
 
-    def recenter(self, pt, world=False):
+    def recenter(self, pt=None, world=False):
+        if pt is None:
+            pt = self._mousePos
         ctr = self._transform.inverted()[0].map(self.rect().center())
         if not world:
             pt = self._transform.inverted()[0].map(pt)
@@ -105,10 +109,14 @@ class SchView(QWidget):
         return self._transform.inverted()[0].m11()*6     # 6 pixels
 
     def keyPressEvent(self, e):
-        if e.key() == Qt.Key_Space:
-            self.recenter(self._mousePos)
-        else:
-            e.ignore()
+        # if e.key() == Qt.Key_Space:
+        #     self.recenter(self._mousePos)
+        # else:
+        self.sigKeyPressed.emit(e)
+
+    def keyReleaseEvent(self, e: QKeyEvent):
+        # if e.key() != Qt.Key_Space:
+        self.sigKeyReleased.emit(e)
 
     def wheelEvent(self, e):
         self._wheelAngle += e.angleDelta().y()

@@ -125,12 +125,14 @@ class MainWindow(QMainWindow):
         if self.activeTab is not None:
             self.activeTab.undoChanged.disconnect(self.onTabUndoChanged)
             self.toolsDock.toolChanged.disconnect(self.activeTab.ctrl.changeTool)
+            self.activeTab.ctrl.sigToolChanged.disconnect(self.toolsDock.on_toolChanged)
         if newTab is not None:
             # restore active tool
             self.toolsDock.on_toolChanged(newTab.ctrl.toolType)
             # connect signals
             newTab.undoChanged.connect(self.onTabUndoChanged)
             self.toolsDock.toolChanged.connect(newTab.ctrl.changeTool)
+            newTab.ctrl.sigToolChanged.connect(self.toolsDock.on_toolChanged)
             self.activeTab = newTab
             self.onTabUndoChanged(newTab.canUndo(), newTab.canRedo())
         else:
@@ -200,6 +202,8 @@ class ToolsDock(QDockWidget):
             self.ui.selectBtn.setChecked(True)
         elif tool == ToolType.LineTool:
             self.ui.lineBtn.setChecked(True)
+        elif tool == ToolType.NetTool:
+            self.ui.netBtn.setChecked(True)
         self.blockSignals(False)
 
     @pyqtSlot()

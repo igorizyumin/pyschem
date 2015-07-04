@@ -1,8 +1,6 @@
 from enum import Enum
-
 from PyQt5.QtCore import *
-from PyQt5.QtGui import QPainter
-
+from PyQt5.QtGui import QPainter, QKeyEvent
 from sch.obj.line import LineTool, LineObj, LineEditor
 import sch.obj.net
 
@@ -13,8 +11,24 @@ class ToolType(Enum):
         NetTool = 2
 
 
+class Event(object):
+    class Type(Enum):
+        MouseMoved = 0
+        MousePressed = 1
+        MouseReleased = 2
+        Done = 3
+        Cancel = 4
+
+    def __init__(self, evType, pos=None):
+        super().__init__()
+        self.evType = evType
+        self.pos = pos
+
+
 class Controller(QObject):
     sigUpdate = pyqtSignal()
+    sigEvent = pyqtSignal(Event)
+    sigToolChanged = pyqtSignal(ToolType)
 
     def __init__(self, doc=None, view=None):
         super().__init__()
@@ -26,15 +40,48 @@ class Controller(QObject):
         # properties
         self.view = view
         self.doc = doc
+        self.view.sigMouseMoved.connect(self._onMouseMoved)
+        self.view.sigMouseReleased.connect(self._onMouseReleased)
+        self.view.sigMousePressed.connect(self._onMousePressed)
+        self.view.sigKeyPressed.connect(self._onKeyPressed)
+
+    @pyqtSlot('QMouseEvent', 'QPoint')
+    def _onMouseMoved(self, event, pos: QPoint):
+        self.sigEvent.emit(Event(evType=Event.Type.MouseMoved, pos=pos))
+
+    @pyqtSlot('QPoint')
+    def _onMousePressed(self, pos):
+        self.sigEvent.emit(Event(evType=Event.Type.MousePressed, pos=pos))
+
+    @pyqtSlot('QPoint')
+    def _onMouseReleased(self, pos):
+        self.sigEvent.emit(Event(evType=Event.Type.MouseReleased, pos=pos))
+
+    @pyqtSlot('QKeyEvent')
+    def _onKeyPressed(self, event: QKeyEvent):
+        if event.key() == Qt.Key_Space:
+            self.view.recenter()
+        elif event.key() == Qt.Key_Escape:
+            self.sigEvent.emit(Event(evType=Event.Type.Cancel))
+        elif event.key() == Qt.Key_Enter:
+            self.sigEvent.emit(Event(evType=Event.Type.Done))
+        elif event.key() == Qt.Key_L and self.toolType != ToolType.LineTool:
+            self.changeTool(ToolType.LineTool)
+        elif event.key() == Qt.Key_N and self.toolType != ToolType.NetTool:
+            self.changeTool(ToolType.NetTool)
+        elif event.key() == Qt.Key_S and self.toolType != ToolType.SelectTool:
+            self.changeTool(ToolType.SelectTool)
 
     def _installTool(self, tool):
-        if self.view is None:
+        if self._tool is not None:
+            self._tool.finish()
             self._tool = None
+        if self.view is None:
             return
         self._tool = tool
-        self.view.sigMouseMoved.connect(self._tool.onMouseMoved)
-        self.view.sigMouseReleased.connect(self._tool.onMouseReleased)
+        self.sigEvent.connect(self._tool.onEvent)
         self._tool.sigUpdate.connect(self.sigUpdate)
+        self.sigToolChanged.emit(self.toolType)
 
     def snapPt(self, pt: QPoint):
         g = self.grid
@@ -105,6 +152,10 @@ class SelectTool(QObject):
         self._lastFind = []
         self._editor = None
 
+    def finish(self):
+        self.releaseSelection()
+        self.sigUpdate.emit()
+
     def draw(self, painter: QPainter):
         if self._editor:
             self._editor.draw(painter)
@@ -112,34 +163,30 @@ class SelectTool(QObject):
         for obj in self._selection:
             painter.drawRect(obj.bbox())
 
+    @pyqtSlot('PyQt_PyObject')
+    def onEvent(self, event: Event):
+        if event.evType == Event.Type.MouseReleased:
+            if self._editor and self._editor.testHit(event.pos):
+                return
+            objs = list(self._ctrl.doc.findObjsNear(event.pos, self._ctrl.view.hitRadius()))
+            if len(objs) > 0:
+                # cycle through objects under cursor
+                if set(self._lastFind) == set(objs) and len(self._selection) == 1:
+                    ind = self._lastFind.index(self._selection[0])+1
+                    if ind >= len(self._lastFind):
+                        ind = 0
+                    self._selection = [objs[ind]]
 
-    @pyqtSlot('QMouseEvent', 'QPoint')
-    def onMouseMoved(self, event, pos: QPoint):
-        pass
-
-    @pyqtSlot('QPoint')
-    def onMouseReleased(self, pos):
-        if self._editor and self._editor.testHit(pos):
-            return
-        objs = list(self._ctrl.doc.findObjsNear(pos, self._ctrl.view.hitRadius()))
-        if len(objs) > 0:
-            # cycle through objects under cursor
-            if set(self._lastFind) == set(objs) and len(self._selection) == 1:
-                ind = self._lastFind.index(self._selection[0])+1
-                if ind >= len(self._lastFind):
-                    ind = 0
-                self._selection = [objs[ind]]
-
-            else:
-                self._lastFind = objs
-                self._selection = [objs[0]]
-            self.sigUpdate.emit()
-        else:
-            if self._selection:
-                self._selection = []
-                self._lastFind = []
+                else:
+                    self._lastFind = objs
+                    self._selection = [objs[0]]
                 self.sigUpdate.emit()
-        self.selectionChanged()
+            else:
+                if self._selection:
+                    self._selection = []
+                    self._lastFind = []
+                    self.sigUpdate.emit()
+            self.selectionChanged()
 
     @pyqtSlot()
     def releaseSelection(self):
