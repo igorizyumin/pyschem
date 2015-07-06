@@ -113,6 +113,7 @@ class LineEditor(QObject):
         pen.setJoinStyle(Qt.RoundJoin)
         pen.setWidth(0)
         painter.setPen(pen)
+        painter.setBrush(Qt.NoBrush)
         for h in self._handles:
             h.draw(painter)
         painter.drawLine(self._obj.pt1, self._obj.pt2)

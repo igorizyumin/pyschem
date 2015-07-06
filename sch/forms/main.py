@@ -133,10 +133,10 @@ class MainWindow(QMainWindow):
             newTab.undoChanged.connect(self.onTabUndoChanged)
             self.toolsDock.toolChanged.connect(newTab.ctrl.changeTool)
             newTab.ctrl.sigToolChanged.connect(self.toolsDock.on_toolChanged)
-            self.activeTab = newTab
             self.onTabUndoChanged(newTab.canUndo(), newTab.canRedo())
         else:
             self.onTabUndoChanged(False, False)
+        self.activeTab = newTab
 
 
     @pyqtSlot(AbstractPage)
@@ -151,6 +151,10 @@ class MainWindow(QMainWindow):
         if idx >= 0:
             tab = self.ui.tabWidget.widget(idx)
         self.installTab(tab)
+
+    @pyqtSlot(int)
+    def on_tabWidget_tabCloseRequested(self, idx):
+        self.ui.tabWidget.removeTab(idx)
 
 
 class PageTab(QWidget):
