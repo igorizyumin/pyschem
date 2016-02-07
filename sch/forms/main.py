@@ -136,9 +136,15 @@ class MainWindow(QMainWindow):
         else:
             self.onTabUndoChanged(False, False)
 
-
     @pyqtSlot(AbstractPage)
     def on_pageOpen(self, page):
+        for i in range(self.ui.tabWidget.count()):
+            t = self.ui.tabWidget.widget(i)
+            if t.doc == page:
+                # the tab is already open, switch to it
+                self.ui.tabWidget.setCurrentIndex(i)
+                return
+        # tab was not found, create it
         tab = PageTab(page)
         self.installTab(tab)
         self.ui.tabWidget.addTab(tab, page.name)
