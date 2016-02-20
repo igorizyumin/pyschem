@@ -147,7 +147,7 @@ class SelectTool(QObject):
             self._editor.handleEvent(event)
             if event.handled:
                 return
-        if event.evType == Event.Type.MouseReleased:
+        if event.evType == Event.Type.MousePressed:
             objs = list(self._ctrl.doc.findObjsNear(event.pos, self._ctrl.view.hitRadius()))
             if len(objs) > 0:
                 # cycle through objects under cursor
