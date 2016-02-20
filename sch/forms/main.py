@@ -139,6 +139,7 @@ class MainWindow(QMainWindow):
         if self.activeTab is not None:
             self.activeTab.undoChanged.disconnect(self.onTabUndoChanged)
             self.toolsDock.toolChanged.disconnect(self.activeTab.ctrl.changeTool)
+            self.activeTab.ctrl.sigToolChanged.disconnect(self.toolsDock.on_toolChanged)
         self.activeTab = None
 
     @pyqtSlot(AbstractPage)
