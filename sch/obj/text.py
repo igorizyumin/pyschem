@@ -6,6 +6,7 @@ from lxml import etree
 from sch.utils import *
 import sch.controller
 import sch.document
+from sch.view import Event
 
 
 class TextObj(object):
@@ -28,15 +29,14 @@ class TextObj(object):
         self._rot = self.rot
         self._font = QFont(self.family, self.ptSize*scale)
         self._fm = QFontMetrics(self._font)
-        pos = QPoint(pos.x(), pos.y() - self._fm.height())
         self._pos = pos
         self._tr = QTransform()
         self._tr.translate(pos.x(), pos.y())
-        self._tr.rotate(self.rot)
+        self._tr.rotate(-self.rot)
+        self._tr.translate(0, -self._fm.height())
         self._statictext = QStaticText(self.text)
         self._statictext.setTextOption(QTextOption(self.alignment))
         self._statictext.prepare(font=self._font, matrix=self._tr)
-        print(self._statictext.size())
 
     def draw(self, painter: QPainter):
         painter.save()
@@ -46,15 +46,12 @@ class TextObj(object):
         painter.setTransform(self._tr)
         painter.setFont(self._font)
         painter.drawStaticText(QPoint(0, 0), self._statictext)
-        # sz = self._statictext.size()
-        # painter.drawRect(newpos.x(), newpos.y(), sz.width(), sz.height())
         painter.restore()
-        # painter.drawRect(self.bbox())
 
     def bbox(self):
         sz = (self._statictext.size() / self._scale).toSize()
         tr = QTransform()
-        tr.translate(self.pos.x(), self.pos.y() - sz.height())
+        tr.translate(self.pos.x(), self.pos.y())
         tr.rotate(self.rot)
         return tr.mapRect(QRect(QPoint(), sz))
 
@@ -113,6 +110,10 @@ class TextEditor(QObject):
         return self._handle.testHit(pt)
 
     def handleEvent(self, e):
+        if e.evType == Event.Type.KeyPressed:
+            if e.key == Qt.Key_R:
+                self._obj.rot = (self._obj.rot + 90) % 360
+                self._commit()
         self._handle.handleEvent(e)
 
     def draw(self, painter):
