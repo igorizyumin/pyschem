@@ -6,6 +6,7 @@ from PyQt5.QtWidgets import QUndoStack, QUndoCommand
 from lxml import etree
 import sch.obj.line
 import sch.obj.net
+import sch.obj.text
 
 
 class MasterDocument(QObject):
@@ -203,8 +204,10 @@ class DocPage(AbstractPage):
         for obj in objs:
             if obj.tag == "line":
                 self._objs.add(sch.obj.line.LineObj.fromXml(obj))
-            if obj.tag == "net":
+            elif obj.tag == "net":
                 self._objs.add(sch.obj.net.NetObj.fromXml(obj))
+            elif obj.tag == "text":
+                self._objs.add(sch.obj.text.TextObj.fromXml(obj))
 
     def toXml(self, parentNode):
         page = etree.SubElement(parentNode, "page", name=self.name)

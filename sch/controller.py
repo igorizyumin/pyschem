@@ -3,6 +3,7 @@ from PyQt5.QtCore import *
 from PyQt5.QtGui import QPainter, QKeyEvent
 from sch.obj.line import LineTool, LineObj, LineEditor
 import sch.obj.net
+import sch.obj.text
 
 
 class ToolType(Enum):
@@ -203,6 +204,10 @@ class SelectTool(QObject):
             self._editor = sch.obj.net.NetEditor(self._ctrl, self._selection[0])
             self._editor.sigUpdate.connect(self.sigUpdate)
             self._editor.sigDone.connect(self.releaseSelection)
+        elif len(self._selection) == 1 and type(self._selection[0]) is sch.obj.text.TextObj:
+            self._editor = sch.obj.text.TextEditor(self._ctrl, self._selection[0])
+            self._editor.sigUpdate.connect(self.sigUpdate)
+            self._editor.sigDone.connect(self.releaseSelection)
 
 
 # TODO: use chain of responsibility here instead of signals/slots for events; translate keyboard/mouse events into abstract cursor motion, etc.
@@ -251,3 +256,34 @@ class EditHandle(QObject):
     def pos(self, newpos):
         self._pos = newpos
 
+
+class TextHandle(EditHandle):
+    def __init__(self, ctrl, txt):
+        super().__init__(ctrl, txt.pos)
+        self._txt = txt
+        self._start = QPoint()
+
+    def testHit(self, pt: QPoint):
+        return self._txt.testHit(pt, 0)
+
+    def draw(self, painter: QPainter):
+        painter.drawRect(self._txt.bbox())
+
+    @pyqtSlot('QMouseEvent', 'QPoint')
+    def onMouseMoved(self, event, pos: QPoint):
+        if self._dragging:
+            self._pos = self._ctrl.snapPt(self._start + pos)
+            self.sigDragged.emit(self._pos)
+
+    @pyqtSlot('QPoint')
+    def onMousePressed(self, pos):
+        if self.testHit(pos):
+            self._start = self._pos - pos
+            self._dragging = True
+
+    @pyqtSlot('QPoint')
+    def onMouseReleased(self, pos):
+        if self._dragging:
+            self._dragging = False
+            #self._pos = self._ctrl.snapPt(pos)
+            self.sigMoved.emit(self._pos)
