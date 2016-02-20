@@ -20,7 +20,7 @@ class Event(object):
         super().__init__()
         self.evType = evType
         self.pos = pos
-        self.key = None
+        self.key = key
         self.handled = False
 
 
