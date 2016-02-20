@@ -122,10 +122,7 @@ class MainWindow(QMainWindow):
 
     def installTab(self, newTab):
         # disconnect signals from old tab
-        if self.activeTab is not None:
-            self.activeTab.undoChanged.disconnect(self.onTabUndoChanged)
-            self.toolsDock.toolChanged.disconnect(self.activeTab.ctrl.changeTool)
-            self.activeTab.ctrl.sigToolChanged.disconnect(self.toolsDock.on_toolChanged)
+        self.disconnectActiveTab()
         if newTab is not None:
             # restore active tool
             self.toolsDock.on_toolChanged(newTab.ctrl.toolType)
@@ -138,9 +135,21 @@ class MainWindow(QMainWindow):
             self.onTabUndoChanged(False, False)
         self.activeTab = newTab
 
+    def disconnectActiveTab(self):
+        if self.activeTab is not None:
+            self.activeTab.undoChanged.disconnect(self.onTabUndoChanged)
+            self.toolsDock.toolChanged.disconnect(self.activeTab.ctrl.changeTool)
+        self.activeTab = None
 
     @pyqtSlot(AbstractPage)
     def on_pageOpen(self, page):
+        for i in range(self.ui.tabWidget.count()):
+            t = self.ui.tabWidget.widget(i)
+            if t.doc == page:
+                # the tab is already open, switch to it
+                self.ui.tabWidget.setCurrentIndex(i)
+                return
+        # tab was not found, create it
         tab = PageTab(page)
         self.installTab(tab)
         self.ui.tabWidget.addTab(tab, page.name)
@@ -154,6 +163,8 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot(int)
     def on_tabWidget_tabCloseRequested(self, idx):
+        if self.ui.tabWidget.currentIndex() == idx:
+            self.disconnectActiveTab()
         self.ui.tabWidget.removeTab(idx)
 
 
