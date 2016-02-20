@@ -4,7 +4,7 @@ from sch.document import ObjAddCmd, ObjChangeCmd
 import sch.controller
 from sch.utils import LayerType, Layer, Geom
 from lxml import etree
-
+from sch.view import Event
 
 class LineObj(object):
     def __init__(self, pt1=QPoint(0, 0), pt2=QPoint(1, 1), weight=1):
@@ -64,12 +64,12 @@ class LineTool(QObject):
         if self._firstPt is not None:
             painter.drawLine(self._firstPt, self._pos)
 
-    @pyqtSlot('PyQt_PyObject')
-    def onEvent(self, e):
+    def handleEvent(self, e):
         if e.evType == sch.controller.Event.Type.MouseMoved:
             self._pos = self._ctrl.snapPt(e.pos)
             if self._firstPt is not None:
                 self.sigUpdate.emit()
+            e.handled = True
         elif e.evType == sch.controller.Event.Type.MouseReleased:
             if self._firstPt is None:
                 self._firstPt = self._pos
@@ -77,9 +77,11 @@ class LineTool(QObject):
                 self._ctrl.doc.doCommand(ObjAddCmd(LineObj(self._firstPt, self._pos)))
                 self._firstPt = None
                 self.sigUpdate.emit()
+            e.handled = True
         elif e.evType == sch.controller.Event.Type.Cancel:
             self._firstPt = None
             self.sigUpdate.emit()
+            e.handled = True
 
 
 class LineEditor(QObject):
@@ -97,9 +99,6 @@ class LineEditor(QObject):
         self._cmd = ObjChangeCmd(obj)
         for h in self._handles:
             h.sigMoved.connect(self._commit)
-            self._ctrl.view.sigMouseMoved.connect(h.onMouseMoved)
-            self._ctrl.view.sigMousePressed.connect(h.onMousePressed)
-            self._ctrl.view.sigMouseReleased.connect(h.onMouseReleased)
 
     def testHit(self, pt):
         for h in self._handles:
@@ -118,6 +117,11 @@ class LineEditor(QObject):
             h.draw(painter)
         painter.drawLine(self._obj.pt1, self._obj.pt2)
 
+    def handleEvent(self, event: Event):
+        for h in self._handles:
+            h.handleEvent(event)
+            if event.handled:
+                return
 
     @pyqtSlot('QPoint')
     def _dragPt1(self, pos):

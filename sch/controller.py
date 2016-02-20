@@ -1,9 +1,10 @@
 from enum import Enum
 from PyQt5.QtCore import *
-from PyQt5.QtGui import QPainter, QKeyEvent
+from PyQt5.QtGui import QPainter
 from sch.obj.line import LineTool, LineObj, LineEditor
 import sch.obj.net
 import sch.obj.text
+from sch.view import Event
 
 
 class ToolType(Enum):
@@ -12,23 +13,8 @@ class ToolType(Enum):
         NetTool = 2
 
 
-class Event(object):
-    class Type(Enum):
-        MouseMoved = 0
-        MousePressed = 1
-        MouseReleased = 2
-        Done = 3
-        Cancel = 4
-
-    def __init__(self, evType, pos=None):
-        super().__init__()
-        self.evType = evType
-        self.pos = pos
-
-
 class Controller(QObject):
     sigUpdate = pyqtSignal()
-    sigEvent = pyqtSignal(Event)
     sigToolChanged = pyqtSignal(ToolType)
 
     def __init__(self, doc=None, view=None):
@@ -41,37 +27,28 @@ class Controller(QObject):
         # properties
         self.view = view
         self.doc = doc
-        self.view.sigMouseMoved.connect(self._onMouseMoved)
-        self.view.sigMouseReleased.connect(self._onMouseReleased)
-        self.view.sigMousePressed.connect(self._onMousePressed)
-        self.view.sigKeyPressed.connect(self._onKeyPressed)
 
-    @pyqtSlot('QMouseEvent', 'QPoint')
-    def _onMouseMoved(self, event, pos: QPoint):
-        self.sigEvent.emit(Event(evType=Event.Type.MouseMoved, pos=pos))
-
-    @pyqtSlot('QPoint')
-    def _onMousePressed(self, pos):
-        self.sigEvent.emit(Event(evType=Event.Type.MousePressed, pos=pos))
-
-    @pyqtSlot('QPoint')
-    def _onMouseReleased(self, pos):
-        self.sigEvent.emit(Event(evType=Event.Type.MouseReleased, pos=pos))
-
-    @pyqtSlot('QKeyEvent')
-    def _onKeyPressed(self, event: QKeyEvent):
-        if event.key() == Qt.Key_Space:
-            self.view.recenter()
-        elif event.key() == Qt.Key_Escape:
-            self.sigEvent.emit(Event(evType=Event.Type.Cancel))
-        elif event.key() == Qt.Key_Enter:
-            self.sigEvent.emit(Event(evType=Event.Type.Done))
-        elif event.key() == Qt.Key_L and self.toolType != ToolType.LineTool:
-            self.changeTool(ToolType.LineTool)
-        elif event.key() == Qt.Key_N and self.toolType != ToolType.NetTool:
-            self.changeTool(ToolType.NetTool)
-        elif event.key() == Qt.Key_S and self.toolType != ToolType.SelectTool:
-            self.changeTool(ToolType.SelectTool)
+    def handleEvent(self, event):
+        if self._tool is not None:
+            self._tool.handleEvent(event)
+            if event.handled:
+                return
+        if event.evType == Event.Type.KeyPressed:
+            event.handled = True
+            if event.key == Qt.Key_Escape:
+                self.handleEvent(Event(evType=Event.Type.Cancel))
+            elif event.key == Qt.Key_Space:
+                self.view.recenter()
+            elif event.key == Qt.Key_Enter:
+                self.handleEvent(Event(evType=Event.Type.Done))
+            elif event.key == Qt.Key_L:
+                self.changeTool(ToolType.LineTool)
+            elif event.key == Qt.Key_N:
+                self.changeTool(ToolType.NetTool)
+            elif event.key == Qt.Key_S:
+                self.changeTool(ToolType.SelectTool)
+            else:
+                event.handled = False
 
     def _installTool(self, tool):
         if self._tool is not None:
@@ -80,7 +57,6 @@ class Controller(QObject):
         if self.view is None:
             return
         self._tool = tool
-        self.sigEvent.connect(self._tool.onEvent)
         self._tool.sigUpdate.connect(self.sigUpdate)
         self.sigToolChanged.emit(self.toolType)
 
@@ -134,6 +110,8 @@ class Controller(QObject):
 
     @pyqtSlot(ToolType)
     def changeTool(self, tool):
+        if self._toolType == tool:
+            return
         self._toolType = tool
         if tool == ToolType.LineTool:
             self._installTool(LineTool(self))
@@ -164,11 +142,12 @@ class SelectTool(QObject):
         for obj in self._selection:
             painter.drawRect(obj.bbox())
 
-    @pyqtSlot('PyQt_PyObject')
-    def onEvent(self, event: Event):
-        if event.evType == Event.Type.MouseReleased:
-            if self._editor and self._editor.testHit(event.pos):
+    def handleEvent(self, event: Event):
+        if self._editor is not None:
+            self._editor.handleEvent(event)
+            if event.handled:
                 return
+        if event.evType == Event.Type.MouseReleased:
             objs = list(self._ctrl.doc.findObjsNear(event.pos, self._ctrl.view.hitRadius()))
             if len(objs) > 0:
                 # cycle through objects under cursor
@@ -210,7 +189,6 @@ class SelectTool(QObject):
             self._editor.sigDone.connect(self.releaseSelection)
 
 
-# TODO: use chain of responsibility here instead of signals/slots for events; translate keyboard/mouse events into abstract cursor motion, etc.
 # TODO: property inspector / editor
 class EditHandle(QObject):
     sigDragged = pyqtSignal('QPoint')
@@ -219,42 +197,33 @@ class EditHandle(QObject):
     def __init__(self, ctrl, pos=QPoint()):
         super().__init__()
         self._ctrl = ctrl
-        self._pos = QPoint(pos)
+        self.pos = QPoint(pos)
         self._dragging = False
 
     def draw(self, painter: QPainter):
         r = self._ctrl.view.hitRadius() * 0.7
-        x, y = self._pos.x(), self._pos.y()
+        x, y = self.pos.x(), self.pos.y()
         painter.drawRect(QRect(QPoint(x-r, y-r), QPoint(x+r, y+r)))
 
     def testHit(self, pt: QPoint):
-        return (self._pos - self._ctrl.snapPt(pt)).manhattanLength() <= self._ctrl.view.hitRadius()
+        return (self.pos - self._ctrl.snapPt(pt)).manhattanLength() <= self._ctrl.view.hitRadius()
 
-    @pyqtSlot('QMouseEvent', 'QPoint')
-    def onMouseMoved(self, event, pos: QPoint):
-        if self._dragging:
-            self._pos = self._ctrl.snapPt(pos)
-            self.sigDragged.emit(self._pos)
-
-    @pyqtSlot('QPoint')
-    def onMousePressed(self, pos):
-        if self.testHit(pos):
-            self._dragging = True
-
-    @pyqtSlot('QPoint')
-    def onMouseReleased(self, pos):
-        if self._dragging:
-            self._dragging = False
-            self._pos = self._ctrl.snapPt(pos)
-            self.sigMoved.emit(self._pos)
-
-    @property
-    def pos(self):
-        return self._pos
-
-    @pos.setter
-    def pos(self, newpos):
-        self._pos = newpos
+    def handleEvent(self, event: Event):
+        if event.evType == Event.Type.MouseMoved:
+            if self._dragging:
+                self.pos = self._ctrl.snapPt(event.pos)
+                self.sigDragged.emit(self.pos)
+                event.handled = True
+        elif event.evType == Event.Type.MousePressed:
+            if self.testHit(event.pos):
+                self._dragging = True
+                event.handled = True
+        elif event.evType == Event.Type.MouseReleased:
+            if self._dragging:
+                self._dragging = False
+                self.pos = self._ctrl.snapPt(event.pos)
+                self.sigMoved.emit(self.pos)
+                event.handled = True
 
 
 class TextHandle(EditHandle):
@@ -269,21 +238,20 @@ class TextHandle(EditHandle):
     def draw(self, painter: QPainter):
         painter.drawRect(self._txt.bbox())
 
-    @pyqtSlot('QMouseEvent', 'QPoint')
-    def onMouseMoved(self, event, pos: QPoint):
-        if self._dragging:
-            self._pos = self._ctrl.snapPt(self._start + pos)
-            self.sigDragged.emit(self._pos)
-
-    @pyqtSlot('QPoint')
-    def onMousePressed(self, pos):
-        if self.testHit(pos):
-            self._start = self._pos - pos
-            self._dragging = True
-
-    @pyqtSlot('QPoint')
-    def onMouseReleased(self, pos):
-        if self._dragging:
-            self._dragging = False
-            #self._pos = self._ctrl.snapPt(pos)
-            self.sigMoved.emit(self._pos)
+    def handleEvent(self, event: Event):
+        if event.evType == Event.Type.MouseMoved:
+            if self._dragging:
+                self.pos = self._ctrl.snapPt(self._start + event.pos)
+                self.sigDragged.emit(self.pos)
+                event.handled = True
+        elif event.evType == Event.Type.MousePressed:
+            if self.testHit(event.pos):
+                self._start = self.pos - event.pos
+                self._dragging = True
+                event.handled = True
+        elif event.evType == Event.Type.MouseReleased:
+            if self._dragging:
+                self._dragging = False
+                # self.pos = self._ctrl.snapPt(event.pos)
+                self.sigMoved.emit(self.pos)
+                event.handled = True

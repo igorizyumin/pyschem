@@ -3,16 +3,28 @@ from PyQt5.QtGui import QTransform, QPainter, QPen, QBrush, QCursor, QPolygon, Q
 from PyQt5.QtWidgets import *
 from sch.utils import Coord, Layer, LayerType
 from itertools import product
+from enum import Enum
+
+
+class Event(object):
+    class Type(Enum):
+        MouseMoved = 0
+        MousePressed = 1
+        MouseReleased = 2
+        Done = 3
+        Cancel = 4
+        KeyPressed = 5
+        KeyReleased = 6
+
+    def __init__(self, evType, pos=None, key=None):
+        super().__init__()
+        self.evType = evType
+        self.pos = pos
+        self.key = None
+        self.handled = False
 
 
 class SchView(QWidget):
-    # signals for controller to bind to
-    sigMouseMoved = pyqtSignal('QMouseEvent', 'QPoint')
-    sigMousePressed = pyqtSignal('QPoint')
-    sigMouseReleased = pyqtSignal('QPoint')
-    sigKeyPressed = pyqtSignal('QKeyEvent')
-    sigKeyReleased = pyqtSignal('QKeyEvent')
-
     def __init__(self, parent=None):
         QWidget.__init__(self, parent)
         self._transform = QTransform()
@@ -65,6 +77,10 @@ class SchView(QWidget):
                                                             range(startY, endY, g))))
         painter.drawPoints(pts)
 
+    def _handleEvent(self, event: Event):
+        if self._ctrl is not None:
+            self._ctrl.handleEvent(event)
+
     def zoom(self, factor, pos):
         self.recenter(pos)
         p = self._transform.inverted()[0].map(self.rect().center())
@@ -94,29 +110,30 @@ class SchView(QWidget):
             dl = self._transform.inverted()[0].map(dl)
             self._transform.translate(dl.dx(), dl.dy())
             self.update()
-        self.sigMouseMoved.emit(e, self._transform.inverted()[0].map(e.pos()))
+        self._handleEvent(Event(evType=Event.Type.MouseMoved,
+                                pos=self._transform.inverted()[0].map(e.pos())))
         self._mousePos = e.pos()
 
     def mousePressEvent(self, e):
         if e.button() == Qt.LeftButton:
-            self.sigMousePressed.emit(self._transform.inverted()[0].map(e.pos()))
+            self._handleEvent(Event(evType=Event.Type.MousePressed,
+                                    pos=self._transform.inverted()[0].map(e.pos())))
 
     def mouseReleaseEvent(self, e):
         if e.button() == Qt.LeftButton:
-            self.sigMouseReleased.emit(self._transform.inverted()[0].map(e.pos()))
+            self._handleEvent(Event(evType=Event.Type.MouseReleased,
+                                    pos=self._transform.inverted()[0].map(e.pos())))
 
     def hitRadius(self):
         return self._transform.inverted()[0].m11()*6     # 6 pixels
 
     def keyPressEvent(self, e):
-        # if e.key() == Qt.Key_Space:
-        #     self.recenter(self._mousePos)
-        # else:
-        self.sigKeyPressed.emit(e)
+        self._handleEvent(Event(evType=Event.Type.KeyPressed,
+                                key=e.key()))
 
     def keyReleaseEvent(self, e: QKeyEvent):
-        # if e.key() != Qt.Key_Space:
-        self.sigKeyReleased.emit(e)
+        self._handleEvent(Event(evType=Event.Type.KeyReleased,
+                                key=e.key()))
 
     def wheelEvent(self, e):
         self._wheelAngle += e.angleDelta().y()

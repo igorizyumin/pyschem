@@ -105,16 +105,15 @@ class TextEditor(QObject):
         self._obj = obj
         self._handle = sch.controller.TextHandle(self._ctrl, self._obj)
         self._handle.sigDragged.connect(self._drag)
+        self._handle.sigMoved.connect(self._commit)
         self._ctrl.doc.sigChanged.connect(self._docChanged)
         self._cmd = sch.document.ObjChangeCmd(obj)
-        h = self._handle
-        h.sigMoved.connect(self._commit)
-        self._ctrl.view.sigMouseMoved.connect(h.onMouseMoved)
-        self._ctrl.view.sigMousePressed.connect(h.onMousePressed)
-        self._ctrl.view.sigMouseReleased.connect(h.onMouseReleased)
 
     def testHit(self, pt):
         return self._handle.testHit(pt)
+
+    def handleEvent(self, e):
+        self._handle.handleEvent(e)
 
     def draw(self, painter):
         pen = QPen(Layer.color(LayerType.selection))
