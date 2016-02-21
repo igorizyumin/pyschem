@@ -16,6 +16,7 @@ class ToolType(Enum):
 class Controller(QObject):
     sigUpdate = pyqtSignal()
     sigToolChanged = pyqtSignal(ToolType)
+    sigInspectorChanged = pyqtSignal()
 
     def __init__(self, doc=None, view=None):
         super().__init__()
@@ -97,6 +98,10 @@ class Controller(QObject):
         self._doc.sigChanged.connect(self.sigUpdate)
         self.sigUpdate.emit()
 
+    @property
+    def inspector(self):
+        return self._tool.inspector
+
     def getDrawables(self):
         class JunctionDrawable:
             @staticmethod
@@ -130,6 +135,12 @@ class SelectTool(QObject):
         self._selection = []
         self._lastFind = []
         self._editor = None
+
+    @property
+    def inspector(self):
+        if self._editor:
+            return self._editor.inspector
+        return None
 
     def finish(self):
         self.releaseSelection()
@@ -187,6 +198,7 @@ class SelectTool(QObject):
             self._editor = sch.obj.text.TextEditor(self._ctrl, self._selection[0])
             self._editor.sigUpdate.connect(self.sigUpdate)
             self._editor.sigDone.connect(self.releaseSelection)
+        self._ctrl.sigInspectorChanged.emit()
 
 
 # TODO: property inspector / editor

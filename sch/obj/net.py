@@ -88,6 +88,10 @@ class NetTool(QObject):
         self._firstPt = None
         self._pos = QPoint()
 
+    @property
+    def inspector(self):
+        return None
+
     def finish(self):
         self._firstPt = None
         self.sigUpdate.emit()
@@ -231,6 +235,10 @@ class NetEditor(QObject):
 
     def handleEvent(self, e: Event):
         pass
+
+    @property
+    def inspector(self):
+        return None
 
     @pyqtSlot('QPoint')
     def _dragPt1(self, pos):

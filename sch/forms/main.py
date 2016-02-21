@@ -6,6 +6,7 @@ from sch.view import SchView
 from sch.controller import Controller, ToolType
 from sch.document import MasterDocument, AbstractPage
 from sch.forms.projectdock import ProjectDock
+from sch.forms.inspector import InspectorDock
 
 
 class MainWindow(QMainWindow):
@@ -22,10 +23,12 @@ class MainWindow(QMainWindow):
         self.ui.actionUndo.triggered.connect(self.tabUndo)
         self.ui.actionUndo.triggered.connect(self.tabRedo)
         self.docs = []
-        self.toolsDock = ToolsDock()
+        self.toolsDock = ToolsDock(self)
         self.projDock = ProjectDock(self)
+        self.inspDock = InspectorDock(self)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.toolsDock)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.projDock)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.inspDock)
         self.docsChanged.connect(self.projDock.onDocsChanged)
         self.projDock.openPage.connect(self.on_pageOpen)
         self.activeTab = None
@@ -76,6 +79,13 @@ class MainWindow(QMainWindow):
                 elif r == QMessageBox.Cancel:
                     return False
         return True
+
+    @pyqtSlot()
+    def onInspectorChanged(self):
+        if self.activeTab is not None:
+            self.inspDock.setChild(self.activeTab.ctrl.inspector)
+        else:
+            self.inspDock.setChild(None)
 
     @pyqtSlot('bool', 'bool')
     def onTabUndoChanged(self, enUndo, enRedo):
@@ -130,7 +140,9 @@ class MainWindow(QMainWindow):
             newTab.undoChanged.connect(self.onTabUndoChanged)
             self.toolsDock.toolChanged.connect(newTab.ctrl.changeTool)
             newTab.ctrl.sigToolChanged.connect(self.toolsDock.on_toolChanged)
+            newTab.ctrl.sigInspectorChanged.connect(self.onInspectorChanged)
             self.onTabUndoChanged(newTab.canUndo(), newTab.canRedo())
+            self.onInspectorChanged()
         else:
             self.onTabUndoChanged(False, False)
         self.activeTab = newTab
@@ -140,7 +152,9 @@ class MainWindow(QMainWindow):
             self.activeTab.undoChanged.disconnect(self.onTabUndoChanged)
             self.toolsDock.toolChanged.disconnect(self.activeTab.ctrl.changeTool)
             self.activeTab.ctrl.sigToolChanged.disconnect(self.toolsDock.on_toolChanged)
+            self.activeTab.ctrl.sigInspectorChanged.disconnect(self.onInspectorChanged)
         self.activeTab = None
+        self.onInspectorChanged()
 
     @pyqtSlot(AbstractPage)
     def on_pageOpen(self, page):

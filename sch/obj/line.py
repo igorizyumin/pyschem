@@ -51,6 +51,10 @@ class LineTool(QObject):
         self._firstPt = None
         self._pos = QPoint()
 
+    @property
+    def inspector(self):
+        return None
+
     def finish(self):
         self._firstPt = None
         self.sigUpdate.emit()
@@ -122,6 +126,10 @@ class LineEditor(QObject):
             h.handleEvent(event)
             if event.handled:
                 return
+
+    @property
+    def inspector(self):
+        return None
 
     @pyqtSlot('QPoint')
     def _dragPt1(self, pos):

@@ -1,30 +1,60 @@
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
-from PyQt5.QtWidgets import QUndoCommand
+from PyQt5.QtWidgets import QUndoCommand, QWidget
 from enum import Enum
 from lxml import etree
 from sch.utils import *
 import sch.controller
 import sch.document
 from sch.view import Event
+from sch.uic.ui_textinspector import Ui_TextInspector
 
 
 class TextObj(object):
     def __init__(self, text, pos=QPoint(0, 0), alignment=Qt.AlignCenter,
                  family="Helvetica", size=12, rot=0):
-        self.text = text
+        self._text = text
         self.pos = pos
         self.rot = rot
         self.alignment = alignment
-        self.family = family
-        self.ptSize = size
+        self._family = family
+        self._ptSize = size
         self._scale = 1
         self._rot = -1
         self._pos = QPoint()
+        self._dirty = True
+
+    @property
+    def text(self):
+        return self._text
+
+    @text.setter
+    def text(self, txt):
+        self._text = txt
+        self._dirty = True
+
+    @property
+    def family(self):
+        return self._family
+
+    @family.setter
+    def family(self, fam):
+        self._family = fam
+        self._dirty = True
+
+    @property
+    def ptSize(self):
+        return self._ptSize
+
+    @ptSize.setter
+    def ptSize(self, sz):
+        self._ptSize = sz
+        self._dirty = True
 
     def _updateStaticText(self, scale, pos):
-        if self._scale == scale and self._rot == self.rot and self._pos == pos:
+        if self._scale == scale and self._rot == self.rot and self._pos == pos and not self._dirty:
             return
+        self._dirty = False
         self._scale = scale
         self._rot = self.rot
         self._font = QFont(self.family, self.ptSize*scale)
@@ -49,7 +79,7 @@ class TextObj(object):
         painter.restore()
 
     def bbox(self):
-        sz = (self._statictext.size() / self._scale).toSize()
+        sz = (self._statictext.size() / self._scale).toSize().expandedTo(QSize(5000, 5000))
         tr = QTransform()
         tr.translate(self.pos.x(), self.pos.y())
         tr.rotate(self.rot)
@@ -105,6 +135,12 @@ class TextEditor(QObject):
         self._handle.sigMoved.connect(self._commit)
         self._ctrl.doc.sigChanged.connect(self._docChanged)
         self._cmd = sch.document.ObjChangeCmd(obj)
+        self._inspector = TextInspector(obj)
+        self._inspector.edited.connect(self._commit)
+
+    @property
+    def inspector(self):
+        return self._inspector
 
     def testHit(self, pt):
         return self._handle.testHit(pt)
@@ -132,7 +168,7 @@ class TextEditor(QObject):
         self._obj.pos = pos
         self.sigUpdate.emit()
 
-    @pyqtSlot('QPoint')
+    @pyqtSlot()
     def _commit(self):
         self._obj.pos = self._handle.pos
         self._ctrl.doc.doCommand(self._cmd)
@@ -148,3 +184,85 @@ class TextEditor(QObject):
             return
         # object still there, just update handle positions
         self._handle.pos = self._obj.pos
+
+
+class TextInspector(QWidget):
+    edited = pyqtSignal()
+
+    def __init__(self, obj, parent=None):
+        super().__init__(parent)
+        self.ui = Ui_TextInspector()
+        self.ui.setupUi(self)
+        self.obj = None
+        fontSizes = list(range(6, 16)) + list(range(16, 34, 2)) + list(range(36, 48, 4)) + \
+            list(range(48, 66, 6)) + list(range(66, 98, 8))
+        self.ui.fontSize.addItems([str(i) for i in fontSizes])
+        self.obj = obj
+        self._loadProperties(obj)
+
+    def _loadProperties(self, obj: TextObj):
+        self.ui.text.setText(obj.text)
+        if obj.alignment & Qt.AlignLeft:
+            if obj.alignment & Qt.AlignTop:
+                self.ui.btnTopLeft.setChecked(True)
+            elif obj.alignment & Qt.AlignBottom:
+                self.ui.btnBotLeft.setChecked(True)
+            else:
+                self.ui.btnMidLeft.setChecked(True)
+        elif obj.alignment & Qt.AlignRight:
+            if obj.alignment & Qt.AlignTop:
+                self.ui.btnTopRight.setChecked(True)
+            elif obj.alignment & Qt.AlignBottom:
+                self.ui.btnBotRight.setChecked(True)
+            else:
+                self.ui.btnMidRight.setChecked(True)
+        else:
+            if obj.alignment & Qt.AlignTop:
+                self.ui.btnTopCtr.setChecked(True)
+            elif obj.alignment & Qt.AlignBottom:
+                self.ui.btnBotCtr.setChecked(True)
+            else:
+                self.ui.btnMidCtr.setChecked(True)
+        self.ui.fontFace.setCurrentText(obj.family)
+        self.ui.fontSize.setCurrentText("{:g}".format(obj.ptSize/500))
+
+    @pyqtSlot(int)
+    def on_alignGroup_buttonClicked(self, id):
+        if self.ui.btnTopLeft.isChecked():
+            align = Qt.AlignTop | Qt.AlignLeft
+        elif self.ui.btnTopCtr.isChecked():
+            align = Qt.AlignTop | Qt.AlignVCenter
+        elif self.ui.btnTopRight.isChecked():
+            align = Qt.AlignTop | Qt.AlignRight
+        elif self.ui.btnMidLeft.isChecked():
+            align = Qt.AlignHCenter | Qt.AlignLeft
+        elif self.ui.btnMidCtr.isChecked():
+            align = Qt.AlignHCenter | Qt.AlignVCenter
+        elif self.ui.btnMidRight.isChecked():
+            align = Qt.AlignHCenter | Qt.AlignRight
+        elif self.ui.btnBotLeft.isChecked():
+            align = Qt.AlignBottom| Qt.AlignLeft
+        elif self.ui.btnBotCtr.isChecked():
+            align = Qt.AlignBottom | Qt.AlignVCenter
+        elif self.ui.btnBotRight.isChecked():
+            align = Qt.AlignBottom | Qt.AlignRight
+        self.obj.alignment = align
+        self.edited.emit()
+
+    @pyqtSlot(str)
+    def on_text_textEdited(self, text):
+        if self.obj:
+            self.obj.text = text
+            self.edited.emit()
+
+    @pyqtSlot(QFont)
+    def on_fontFace_currentFontChanged(self, font):
+        if self.obj:
+            self.obj.family = font.family()
+            self.edited.emit()
+
+    @pyqtSlot(str)
+    def on_fontSize_editTextChanged(self, text):
+        if self.obj:
+            self.obj.ptSize = int(float(text)*500)
+            self.edited.emit()

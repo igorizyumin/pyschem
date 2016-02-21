@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>Form</class>
- <widget class="QWidget" name="Form">
+ <class>TextInspector</class>
+ <widget class="QWidget" name="TextInspector">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -52,7 +52,7 @@
      <item>
       <widget class="QComboBox" name="fontSize">
        <property name="sizePolicy">
-        <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+        <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
          <horstretch>0</horstretch>
          <verstretch>0</verstretch>
         </sizepolicy>
