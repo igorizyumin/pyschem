@@ -1,4 +1,4 @@
-from PyQt5.QtCore import pyqtSignal, pyqtSlot, Qt
+from PyQt5.QtCore import pyqtSignal, pyqtSlot, Qt, QSettings, QVariant, QByteArray
 from PyQt5.QtWidgets import QMainWindow, QDockWidget, QMessageBox, QFileDialog, QWidget, QVBoxLayout
 from sch.uic.ui_mainwindow import Ui_MainWindow
 from sch.uic.ui_toolsdock import Ui_ToolsDock
@@ -32,10 +32,22 @@ class MainWindow(QMainWindow):
         self.docsChanged.connect(self.projDock.onDocsChanged)
         self.projDock.openPage.connect(self.on_pageOpen)
         self.activeTab = None
+        self.loadSettings()
+
+    def saveSettings(self):
+        s = QSettings()
+        s.setValue("MainWindow/state", self.saveState())
+        s.setValue("MainWindow/geometry", self.saveGeometry())
+
+    def loadSettings(self):
+        s = QSettings()
+        self.restoreGeometry(s.value("MainWindow/geometry", QByteArray()))
+        self.restoreState(s.value("MainWindow/state", QByteArray()))
 
     def closeEvent(self, e):
         if self.saveAll():
             e.accept()
+            self.saveSettings()
             super().closeEvent(e)
         else:
             e.ignore()
