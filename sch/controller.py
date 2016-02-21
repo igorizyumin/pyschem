@@ -199,6 +199,7 @@ class EditHandle(QObject):
         self._ctrl = ctrl
         self.pos = QPoint(pos)
         self._dragging = False
+        self._moved = False
 
     def draw(self, painter: QPainter):
         r = self._ctrl.view.hitRadius() * 0.7
@@ -211,18 +212,22 @@ class EditHandle(QObject):
     def handleEvent(self, event: Event):
         if event.evType == Event.Type.MouseMoved:
             if self._dragging:
-                self.pos = self._ctrl.snapPt(event.pos)
-                self.sigDragged.emit(self.pos)
+                if self.pos != self._ctrl.snapPt(event.pos):
+                    self.pos = self._ctrl.snapPt(event.pos)
+                    self.sigDragged.emit(self.pos)
+                    self._moved = True
                 event.handled = True
         elif event.evType == Event.Type.MousePressed:
             if self.testHit(event.pos):
                 self._dragging = True
+                self._moved = False
                 event.handled = True
         elif event.evType == Event.Type.MouseReleased:
             if self._dragging:
                 self._dragging = False
-                self.pos = self._ctrl.snapPt(event.pos)
-                self.sigMoved.emit(self.pos)
+                if self._moved or self.pos != self._ctrl.snapPt(event.pos):
+                    self.pos = self._ctrl.snapPt(event.pos)
+                    self.sigMoved.emit(self.pos)
                 event.handled = True
 
 
@@ -241,17 +246,21 @@ class TextHandle(EditHandle):
     def handleEvent(self, event: Event):
         if event.evType == Event.Type.MouseMoved:
             if self._dragging:
-                self.pos = self._ctrl.snapPt(self._start + event.pos)
-                self.sigDragged.emit(self.pos)
+                if self.pos != self._ctrl.snapPt(self._start + event.pos):
+                    self.pos = self._ctrl.snapPt(self._start + event.pos)
+                    self.sigDragged.emit(self.pos)
+                    self._moved = True
                 event.handled = True
         elif event.evType == Event.Type.MousePressed:
             if self.testHit(event.pos):
                 self._start = self.pos - event.pos
                 self._dragging = True
+                self._moved = False
                 event.handled = True
         elif event.evType == Event.Type.MouseReleased:
             if self._dragging:
                 self._dragging = False
                 # self.pos = self._ctrl.snapPt(event.pos)
-                self.sigMoved.emit(self.pos)
+                if self._moved:
+                    self.sigMoved.emit(self.pos)
                 event.handled = True

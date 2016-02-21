@@ -15,6 +15,7 @@ class Event(object):
         Cancel = 4
         KeyPressed = 5
         KeyReleased = 6
+        MouseDblClicked = 7
 
     def __init__(self, evType, pos=None, key=None):
         super().__init__()
@@ -122,6 +123,11 @@ class SchView(QWidget):
     def mouseReleaseEvent(self, e):
         if e.button() == Qt.LeftButton:
             self._handleEvent(Event(evType=Event.Type.MouseReleased,
+                                    pos=self._transform.inverted()[0].map(e.pos())))
+
+    def mouseDoubleClickEvent(self, e):
+        if e.button() == Qt.LeftButton:
+            self._handleEvent(Event(evType=Event.Type.MouseDblClicked,
                                     pos=self._transform.inverted()[0].map(e.pos())))
 
     def hitRadius(self):

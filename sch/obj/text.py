@@ -114,6 +114,8 @@ class TextEditor(QObject):
             if e.key == Qt.Key_R:
                 self._obj.rot = (self._obj.rot + 90) % 360
                 self._commit()
+        elif e.evType == Event.Type.MouseDblClicked:
+            print("dbl click event")
         self._handle.handleEvent(e)
 
     def draw(self, painter):
