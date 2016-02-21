@@ -71,6 +71,10 @@ class TextObj(object):
     def draw(self, painter: QPainter):
         painter.save()
         tr = painter.transform()
+        pen = QPen(Layer.color(LayerType.annotate))
+        brush = QBrush(Layer.color(LayerType.annotate))
+        painter.setPen(pen)
+        painter.setBrush(brush)
         pos = tr.map(self.pos)
         self._updateStaticText(scale=abs(tr.m22()), pos=pos)
         painter.setTransform(self._tr)
