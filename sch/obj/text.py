@@ -8,7 +8,7 @@ import sch.controller
 import sch.document
 from sch.view import Event
 from sch.uic.ui_textinspector import Ui_TextInspector
-
+import copy
 
 class TextObj(object):
     def __init__(self, text, pos=QPoint(0, 0), alignment=Qt.AlignCenter,
@@ -126,6 +126,43 @@ class TextObj(object):
         return TextObj(text, pos, alignment, elem.attrib['fontFamily'], int(elem.attrib['fontSize']), rot)
 
 
+class TextTool(QObject):
+    sigUpdate = pyqtSignal()
+
+    def __init__(self, ctrl):
+        QObject.__init__(self)
+        self._ctrl = ctrl
+        self._pos = QPoint()
+        self._obj = TextObj("Text")
+        self._inspector = TextInspector(self._obj)
+        # self._inspector.edited.connect(self._commit)
+
+    def finish(self):
+        self._obj = None
+        self.sigUpdate.emit()
+        pass
+
+    @property
+    def inspector(self):
+        return self._inspector
+
+    def draw(self, painter):
+        if self._obj is not None:
+            self._obj.draw(painter)
+
+    def handleEvent(self, e):
+        if e.evType == sch.controller.Event.Type.MouseMoved:
+            self._obj.pos = self._ctrl.snapPt(e.pos)
+            self.sigUpdate.emit()
+            e.handled = True
+        elif e.evType == sch.controller.Event.Type.MouseReleased:
+            cmd = sch.document.ObjAddCmd(self._obj)
+            self._ctrl.doc.doCommand(cmd)
+            self._obj = copy.copy(self._obj)
+            self._inspector.obj = self._obj
+            e.handled = True
+
+
 class TextEditor(QObject):
     sigUpdate = pyqtSignal()
     sigDone = pyqtSignal()
@@ -197,12 +234,21 @@ class TextInspector(QWidget):
         super().__init__(parent)
         self.ui = Ui_TextInspector()
         self.ui.setupUi(self)
-        self.obj = None
+        self._obj = None
         fontSizes = list(range(6, 16)) + list(range(16, 34, 2)) + list(range(36, 48, 4)) + \
             list(range(48, 66, 6)) + list(range(66, 98, 8))
         self.ui.fontSize.addItems([str(i) for i in fontSizes])
-        self.obj = obj
+        self._obj = obj
         self._loadProperties(obj)
+
+    @property
+    def obj(self):
+        return self._obj
+
+    @obj.setter
+    def obj(self, new):
+        self._obj = new
+        self._loadProperties(new)
 
     def _loadProperties(self, obj: TextObj):
         self.ui.text.setText(obj.text)

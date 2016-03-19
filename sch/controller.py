@@ -5,12 +5,13 @@ from sch.obj.line import LineTool, LineObj, LineEditor
 import sch.obj.net
 import sch.obj.text
 from sch.view import Event
-
+from copy import copy
 
 class ToolType(Enum):
         SelectTool = 0
         LineTool = 1
         NetTool = 2
+        TextTool = 3
 
 
 class Controller(QObject):
@@ -48,6 +49,8 @@ class Controller(QObject):
                 self.changeTool(ToolType.NetTool)
             elif event.key == Qt.Key_S:
                 self.changeTool(ToolType.SelectTool)
+            elif event.key == Qt.Key_T:
+                self.changeTool(ToolType.TextTool)
             else:
                 event.handled = False
 
@@ -124,6 +127,9 @@ class Controller(QObject):
             self._installTool(sch.obj.net.NetTool(self))
         elif tool == ToolType.SelectTool:
             self._installTool(SelectTool(self))
+        elif tool == ToolType.TextTool:
+            self._installTool(sch.obj.text.TextTool(self))
+        self.sigInspectorChanged.emit()
 
 
 class SelectTool(QObject):

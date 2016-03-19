@@ -246,6 +246,8 @@ class ToolsDock(QDockWidget):
             self.ui.lineBtn.setChecked(True)
         elif tool == ToolType.NetTool:
             self.ui.netBtn.setChecked(True)
+        elif tool == ToolType.TextTool:
+            self.ui.textBtn.setChecked(True)
         self.blockSignals(False)
 
     @pyqtSlot()
@@ -260,4 +262,6 @@ class ToolsDock(QDockWidget):
     def on_netBtn_clicked(self):
         self.toolChanged.emit(ToolType.NetTool)
 
-
+    @pyqtSlot()
+    def on_textBtn_clicked(self):
+        self.toolChanged.emit(ToolType.TextTool)
