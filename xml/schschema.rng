@@ -326,9 +326,9 @@
   </define>
   <define name="Part">
     <element name="part">
-      <!-- UUID of master cell -->
-      <attribute name="masterUuid">
-        <ref name="UuidStr"/>
+      <!-- path to master cell -->
+      <attribute name="schPath">
+        <data type="string"/>
       </attribute>
       <!-- id of the sub-part (vector index is optional) -->
       <attribute name="partId">

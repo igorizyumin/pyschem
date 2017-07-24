@@ -7,6 +7,7 @@ from lxml import etree
 import sch.obj.line
 import sch.obj.net
 import sch.obj.text
+import sch.obj.part
 
 
 class MasterDocument(QObject):
@@ -14,11 +15,12 @@ class MasterDocument(QObject):
     sigChanged = pyqtSignal()
     sigCleanChanged = pyqtSignal()
 
-    def __init__(self):
+    def __init__(self, lib):
         QObject.__init__(self)
         self._uuid = uuid4()
         self._symbols = []
         self._pages = []
+        self.lib = lib
         self.fileName = None
 
     def name(self):
@@ -208,6 +210,8 @@ class DocPage(AbstractPage):
                 self._objs.add(sch.obj.net.NetObj.fromXml(obj))
             elif obj.tag == "text":
                 self._objs.add(sch.obj.text.TextObj.fromXml(obj))
+            elif obj.tag == "part":
+                self._objs.add(sch.obj.part.PartObj.fromXml(obj, self._parent.lib))
 
     def toXml(self, parentNode):
         page = etree.SubElement(parentNode, "page", name=self.name)

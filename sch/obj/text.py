@@ -10,9 +10,10 @@ from sch.view import Event
 from sch.uic.ui_textinspector import Ui_TextInspector
 import copy
 
+
 class TextObj(object):
     def __init__(self, text, pos=QPoint(0, 0), alignment=Qt.AlignCenter,
-                 family="Helvetica", size=12, rot=0):
+                 family="Helvetica", size=12*500, rot=0):
         self._text = text
         self.pos = pos
         self.rot = rot
@@ -294,7 +295,7 @@ class TextInspector(QWidget):
             align = Qt.AlignBottom| Qt.AlignLeft
         elif self.ui.btnBotCtr.isChecked():
             align = Qt.AlignBottom | Qt.AlignVCenter
-        elif self.ui.btnBotRight.isChecked():
+        else:
             align = Qt.AlignBottom | Qt.AlignRight
         self.obj.alignment = align
         self.edited.emit()

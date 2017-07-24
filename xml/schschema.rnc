@@ -139,8 +139,8 @@ SchObject = ( Line | Text | Part | Net )
 
 Part = element part
 {
-    # UUID of master cell
-    attribute masterUuid { UuidStr },
+    # path to master cell
+    attribute schPath { xsd:string },
     # id of the sub-part (vector index is optional)
     attribute partId { xsd:string },
     CoordsAttr,

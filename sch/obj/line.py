@@ -1,6 +1,6 @@
 from PyQt5.QtCore import *
 from PyQt5.QtGui import QPainter, QPen
-from sch.document import ObjAddCmd, ObjChangeCmd
+import sch.document
 import sch.controller
 from sch.utils import LayerType, Layer, Geom
 from lxml import etree
@@ -78,7 +78,7 @@ class LineTool(QObject):
             if self._firstPt is None:
                 self._firstPt = self._pos
             else:
-                self._ctrl.doc.doCommand(ObjAddCmd(LineObj(self._firstPt, self._pos)))
+                self._ctrl.doc.doCommand(sch.document.ObjAddCmd(LineObj(self._firstPt, self._pos)))
                 self._firstPt = None
                 self.sigUpdate.emit()
             e.handled = True

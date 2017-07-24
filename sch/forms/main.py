@@ -7,6 +7,7 @@ from sch.controller import Controller, ToolType
 from sch.document import MasterDocument, AbstractPage
 from sch.forms.projectdock import ProjectDock
 from sch.forms.inspector import InspectorDock
+from sch.library import PartLibrary
 
 
 class MainWindow(QMainWindow):
@@ -23,6 +24,7 @@ class MainWindow(QMainWindow):
         self.ui.actionUndo.triggered.connect(self.tabUndo)
         self.ui.actionUndo.triggered.connect(self.tabRedo)
         self.docs = []
+        self.lib = PartLibrary()
         self.toolsDock = ToolsDock(self)
         self.projDock = ProjectDock(self)
         self.inspDock = InspectorDock(self)
@@ -118,7 +120,7 @@ class MainWindow(QMainWindow):
                     self.ui.statusbar.showMessage("Document already open", 5000)
                     return
             try:
-                d = MasterDocument()
+                d = MasterDocument(self.lib)
                 d.loadFromFile(fn)
                 self.docs.append(d)
                 self.docsChanged.emit()
@@ -177,7 +179,7 @@ class MainWindow(QMainWindow):
                 self.ui.tabWidget.setCurrentIndex(i)
                 return
         # tab was not found, create it
-        tab = PageTab(page)
+        tab = PageTab(page, lib=self.lib)
         self.installTab(tab)
         self.ui.tabWidget.addTab(tab, page.name)
 
@@ -199,11 +201,11 @@ class PageTab(QWidget):
     # args: can undo / can redo
     undoChanged = pyqtSignal(bool, bool)
 
-    def __init__(self, doc: AbstractPage, parent=None):
+    def __init__(self, doc: AbstractPage, parent=None, lib=None):
         super().__init__(parent)
         self.view = SchView()
         self.doc = doc
-        self.ctrl = Controller(doc=self.doc, view=self.view)
+        self.ctrl = Controller(doc=self.doc, view=self.view, lib=lib)
         self.view.setCtrl(self.ctrl)
         self.doc.undoStack.canUndoChanged.connect(self._onUndoChanged)
         self.doc.undoStack.canRedoChanged.connect(self._onUndoChanged)
@@ -248,6 +250,8 @@ class ToolsDock(QDockWidget):
             self.ui.netBtn.setChecked(True)
         elif tool == ToolType.TextTool:
             self.ui.textBtn.setChecked(True)
+        elif tool == ToolType.PartTool:
+            self.ui.partBtn.setChecked(True)
         self.blockSignals(False)
 
     @pyqtSlot()
@@ -265,3 +269,7 @@ class ToolsDock(QDockWidget):
     @pyqtSlot()
     def on_textBtn_clicked(self):
         self.toolChanged.emit(ToolType.TextTool)
+
+    @pyqtSlot()
+    def on_partBtn_clicked(self):
+        self.toolChanged.emit(ToolType.PartTool)

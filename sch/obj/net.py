@@ -9,6 +9,7 @@ from lxml import etree
 from collections import defaultdict
 from sch.view import Event
 
+
 class NetObj(object):
     def __init__(self, pt1=QPoint(0, 0), pt2=QPoint(1, 1)):
         self.pt1 = QPoint(pt1)
@@ -208,14 +209,14 @@ class NetEditor(QObject):
         super().__init__()
         self._ctrl = ctrl
         self._obj = obj
-        self._handles = []
-        # self._handles = [sch.controller.EditHandle(self._ctrl, obj.pt1), sch.controller.EditHandle(self._ctrl, obj.pt2)]
-        # self._handles[0].sigDragged.connect(self._dragPt1)
-        # self._handles[1].sigDragged.connect(self._dragPt2)
+        #self._handles = []
+        #self._handles = [sch.controller.EditHandle(self._ctrl, obj.pt1), sch.controller.EditHandle(self._ctrl, obj.pt2)]
+        #self._handles[0].sigDragged.connect(self._dragPt1)
+        #self._handles[1].sigDragged.connect(self._dragPt2)
         self._ctrl.doc.sigChanged.connect(self._docChanged)
         self._cmd = sch.document.ObjChangeCmd(obj)
-        for h in self._handles:
-            h.sigMoved.connect(self._commit)
+        #for h in self._handles:
+        #    h.sigMoved.connect(self._commit)
 
     def testHit(self, pt):
         for h in self._handles:
@@ -229,8 +230,8 @@ class NetEditor(QObject):
         pen.setJoinStyle(Qt.RoundJoin)
         pen.setWidth(0)
         painter.setPen(pen)
-        for h in self._handles:
-            h.draw(painter)
+        #for h in self._handles:
+        #    h.draw(painter)
         painter.drawLine(self._obj.pt1, self._obj.pt2)
 
     def handleEvent(self, e: Event):
@@ -266,8 +267,8 @@ class NetEditor(QObject):
             self.sigDone.emit()
             return
         # object still there, just update handle positions
-        self._handles[0].pos = self._obj.pt1
-        self._handles[1].pos = self._obj.pt2
+        #self._handles[0].pos = self._obj.pt1
+        #self._handles[1].pos = self._obj.pt2
 
 
 

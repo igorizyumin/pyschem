@@ -4,14 +4,17 @@ from PyQt5.QtGui import QPainter
 from sch.obj.line import LineTool, LineObj, LineEditor
 import sch.obj.net
 import sch.obj.text
+import sch.obj.part
 from sch.view import Event
 from copy import copy
+
 
 class ToolType(Enum):
         SelectTool = 0
         LineTool = 1
         NetTool = 2
         TextTool = 3
+        PartTool = 4
 
 
 class Controller(QObject):
@@ -19,13 +22,14 @@ class Controller(QObject):
     sigToolChanged = pyqtSignal(ToolType)
     sigInspectorChanged = pyqtSignal()
 
-    def __init__(self, doc=None, view=None):
+    def __init__(self, doc=None, view=None, lib=None):
         super().__init__()
         self._view = None
         self._doc = None
         self._tool = None
         self._toolType = ToolType.SelectTool
         self._grid = 5000
+        self.lib = lib
         # properties
         self.view = view
         self.doc = doc
@@ -129,6 +133,8 @@ class Controller(QObject):
             self._installTool(SelectTool(self))
         elif tool == ToolType.TextTool:
             self._installTool(sch.obj.text.TextTool(self))
+        elif tool == ToolType.PartTool:
+            self._installTool(sch.obj.part.PartTool(self))
         self.sigInspectorChanged.emit()
 
 
