@@ -1,11 +1,12 @@
 from enum import Enum
 from PyQt5.QtCore import *
-from PyQt5.QtGui import QPainter
+from PyQt5.QtGui import QPainter, QPen
 from sch.obj.line import LineTool, LineObj, LineEditor
 import sch.obj.net
 import sch.obj.text
 import sch.obj.part
 from sch.view import Event
+from sch.utils import Layer, LayerType
 from copy import copy
 
 
@@ -162,6 +163,12 @@ class SelectTool(QObject):
         if self._editor:
             self._editor.draw(painter)
             return
+        pen = QPen(Layer.color(LayerType.selection))
+        pen.setCapStyle(Qt.RoundCap)
+        pen.setJoinStyle(Qt.RoundJoin)
+        pen.setWidth(0)
+        painter.setBrush(Qt.NoBrush)
+        painter.setPen(pen)
         for obj in self._selection:
             painter.drawRect(obj.bbox())
 

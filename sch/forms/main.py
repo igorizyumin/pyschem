@@ -108,7 +108,7 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot()
     def on_actionNew_triggered(self):
-        self.docs.append(MasterDocument())
+        self.docs.append(MasterDocument(self.lib))
         self.docsChanged.emit()
 
     @pyqtSlot()

@@ -100,7 +100,7 @@ class LineEditor(QObject):
         self._handles[0].sigDragged.connect(self._dragPt1)
         self._handles[1].sigDragged.connect(self._dragPt2)
         self._ctrl.doc.sigChanged.connect(self._docChanged)
-        self._cmd = ObjChangeCmd(obj)
+        self._cmd = sch.document.ObjChangeCmd(obj)
         for h in self._handles:
             h.sigMoved.connect(self._commit)
 
@@ -146,7 +146,7 @@ class LineEditor(QObject):
         self._obj.pt1 = self._handles[0].pos
         self._obj.pt2 = self._handles[1].pos
         self._ctrl.doc.doCommand(self._cmd)
-        self._cmd = ObjChangeCmd(self._obj)
+        self._cmd = sch.document.ObjChangeCmd(self._obj)
         self.sigUpdate.emit()
 
     @pyqtSlot()

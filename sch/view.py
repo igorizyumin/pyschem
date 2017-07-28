@@ -83,15 +83,17 @@ class SchView(QWidget):
             self._ctrl.handleEvent(event)
 
     def zoom(self, factor, pos):
-        self.recenter(pos)
-        p = self._transform.inverted()[0].map(self.rect().center())
-        test = QTransform(self._transform)
-        test.scale(factor, factor)
+        p = self._transform.inverted()[0].map(pos)
+        # test = QTransform(self._transform)
+        # test.scale(factor, factor)
         # check if the bounding rectangle does not enclose the view
         # refuse to zoom out (factor < 1) if this is the case
         # XXX TODO
         self._transform.scale(factor, factor)
-        self.recenter(p, True)
+        p2 = self._transform.inverted()[0].map(pos)
+        delta = p2 - p
+        self._transform.translate(delta.x(), delta.y())
+        self.update()
 
     def recenter(self, pt=None, world=False):
         if pt is None:
