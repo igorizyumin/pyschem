@@ -59,6 +59,7 @@ class SchView(QWidget):
             painter.setTransform(self._transform)
             painter.setPen(pen)
             self._drawGrid(painter)
+            self._drawOrigin(painter)
             # draw drawables
             # painter.setRenderHint(QPainter.Antialiasing)
             for d in self._ctrl.getDrawables():
@@ -77,6 +78,10 @@ class SchView(QWidget):
         pts = QPolygon((QPoint(i[0], i[1]) for i in product(range(startX, endX, g),
                                                             range(startY, endY, g))))
         painter.drawPoints(pts)
+
+    def _drawOrigin(self, painter):
+        painter.drawLine(-2000, 0, 2000, 0)
+        painter.drawLine(0, -2000, 0, 2000)
 
     def _handleEvent(self, event: Event):
         if self._ctrl is not None:

@@ -170,7 +170,7 @@ class SelectTool(QObject):
         painter.setBrush(Qt.NoBrush)
         painter.setPen(pen)
         for obj in self._selection:
-            painter.drawRect(obj.bbox())
+            painter.drawRect(obj.bbox().marginsAdded(QMargins(500,500,500,500)))
 
     def handleEvent(self, event: Event):
         if self._editor is not None:
@@ -196,14 +196,14 @@ class SelectTool(QObject):
                     self._selection = []
                     self._lastFind = []
                     self.sigUpdate.emit()
-            self.selectionChanged()
+            self.selectionChanged(event)
 
     @pyqtSlot()
     def releaseSelection(self):
         self._selection.clear()
         self.selectionChanged()
 
-    def selectionChanged(self):
+    def selectionChanged(self, event=None):
         self._editor = None
         if len(self._selection) == 1 and type(self._selection[0]) is LineObj:
             self._editor = LineEditor(self._ctrl, self._selection[0])
@@ -217,7 +217,13 @@ class SelectTool(QObject):
             self._editor = sch.obj.text.TextEditor(self._ctrl, self._selection[0])
             self._editor.sigUpdate.connect(self.sigUpdate)
             self._editor.sigDone.connect(self.releaseSelection)
+        elif len(self._selection) == 1 and type(self._selection[0]) is sch.obj.part.PartObj:
+            self._editor = sch.obj.part.PartEditor(self._ctrl, self._selection[0])
+            self._editor.sigUpdate.connect(self.sigUpdate)
+            self._editor.sigDone.connect(self.releaseSelection)
         self._ctrl.sigInspectorChanged.emit()
+        if event and self._editor is not None:
+            self._editor.handleEvent(event)
 
 
 # TODO: property inspector / editor

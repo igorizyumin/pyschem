@@ -17,12 +17,15 @@ class PartObj(object):
         self._path = path
         self._name = name
         self.path = None
-        self.rot = rot
-        self.mirror = mirror
+        self._rot = None
+        self._mirror = None
         self._pos = None
         self._tr = None
         self._bb = None
         self.pos = QPoint(pos)
+        self.rot = rot
+        self.mirror = mirror
+        self._masterBbox = None
 
     @property
     def pos(self):
@@ -31,6 +34,26 @@ class PartObj(object):
     @pos.setter
     def pos(self, new):
         self._pos = new
+        self._tr = None
+        self._bb = None
+
+    @property
+    def rot(self):
+        return self._rot
+
+    @rot.setter
+    def rot(self, new):
+        self._rot = new
+        self._tr = None
+        self._bb = None
+
+    @property
+    def mirror(self):
+        return self._mirror
+
+    @mirror.setter
+    def mirror(self, new):
+        self._mirror = new
         self._tr = None
         self._bb = None
 
@@ -54,29 +77,33 @@ class PartObj(object):
 
     def _updateMaster(self):
         self._master = self._lib.getSym(self.path, self.name)
+        self._updateMasterBbox()
         self._bb = None
 
     def _updateTransform(self):
         if self._tr is None:
             self._tr = QTransform()
             self._tr.translate(self.pos.x(), self.pos.y())
+            self._tr.scale(-1 if self.mirror else 1, 1)
             self._tr.rotate(-self.rot)
+
+    def _updateMasterBbox(self):
+        bb = None
+        if self._master:
+            for obj in self._master.objects():
+                if bb is not None:
+                    bb |= obj.bbox()
+                else:
+                    bb = obj.bbox()
+        self._masterBbox = bb
 
     def _updateBbox(self):
         self._updateTransform()
-        if self._master is None:
+        if self._masterBbox is None:
             self._bb = QRect()
             return
-        bb = None
-        for obj in self._master.objects():
-            if bb is not None:
-                bb |= obj.bbox()
-            else:
-                bb = obj.bbox()
-        if bb:
-            self._bb = QRect(self._tr.map(bb.topLeft()), self._tr.map(bb.bottomRight())).normalized()
-        else:
-            self._bb = QRect()
+        self._bb = QRect(self._tr.map(self._masterBbox.topLeft()),
+                         self._tr.map(self._masterBbox.bottomRight())).normalized()
 
     def draw(self, painter: QPainter):
         if self._master is None:
@@ -167,9 +194,9 @@ class PartInspector(QWidget):
         self.ui = Ui_PartInspector()
         self.ui.setupUi(self)
         self._ctrl = ctrl
+        self._populateList()
         self._obj = None
         self.obj = obj
-        self._populateList()
 
     @property
     def obj(self):
@@ -189,9 +216,101 @@ class PartInspector(QWidget):
                 self.ui.masterList.addItem(item)
 
     def _loadProperties(self, obj: PartObj):
-        pass
+        if obj is None:
+            return
+        for i in range(0, self.ui.masterList.count()):
+            path, name = self.ui.masterList.item(i).data(Qt.UserRole)
+            if path == obj.path and name == obj.name:
+                self.ui.masterList.setCurrentRow(i)
+                break
 
     @pyqtSlot(QListWidgetItem, QListWidgetItem)
     def on_masterList_currentItemChanged(self, curr, prev):
         d = curr.data(Qt.UserRole)
         self.masterChanged.emit(d[0], d[1])
+
+
+class PartEditor(QObject):
+    sigUpdate = pyqtSignal()
+    sigDone = pyqtSignal()
+
+    def __init__(self, ctrl, obj):
+        super().__init__()
+        self._ctrl = ctrl
+        self._obj = obj
+        self._ctrl.doc.sigChanged.connect(self._docChanged)
+        self._cmd = sch.document.ObjChangeCmd(obj)
+        self._inspector = PartInspector(ctrl, obj)
+        self._inspector.edited.connect(self._commit)
+        self._inspector.masterChanged.connect(self._masterChanged)
+        self._dragging = False
+        self._startPos = QPoint()
+        self._grabOffset = QPoint()
+
+    def testHit(self, pt):
+        return self._obj.testHit(pt, 0)
+
+    def draw(self, painter):
+        pen = QPen(Layer.color(LayerType.selection))
+        pen.setCapStyle(Qt.RoundCap)
+        pen.setJoinStyle(Qt.RoundJoin)
+        pen.setWidth(0)
+        painter.setPen(pen)
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRect(self._obj.bbox().marginsAdded(QMargins(500,500,500,500)))
+
+    def handleEvent(self, event: Event):
+        if event.evType == Event.Type.MouseMoved:
+            if self._dragging:
+                self._obj.pos = self._ctrl.snapPt(self._grabOffset + event.pos)
+                event.handled = True
+                self.sigUpdate.emit()
+        elif event.evType == Event.Type.MousePressed:
+            if self.testHit(event.pos):
+                self._dragging = True
+                self._startPos = self._obj.pos
+                self._grabOffset = self._obj.pos - event.pos
+                event.handled = True
+        elif event.evType == Event.Type.MouseReleased:
+            if self._dragging:
+                self._dragging = False
+                if self._startPos != self._obj.pos:
+                    self._commit()
+                event.handled = True
+        elif event.evType == Event.Type.KeyPressed:
+            if event.key == Qt.Key_R:
+                rot = -90 if self._obj.mirror else 90
+                self._obj.rot = (self._obj.rot + rot) % 360
+                self._commit()
+            if event.key == Qt.Key_H:
+                self._obj.rot = (self._obj.rot + 180) % 360
+                self._obj.mirror = not self._obj.mirror
+                self._commit()
+            if event.key == Qt.Key_V:
+                # self._obj.rot = (self._obj.rot + 180) % 360
+                self._obj.mirror = not self._obj.mirror
+                self._commit()
+
+    @property
+    def inspector(self):
+        return self._inspector
+
+    @pyqtSlot(str, str)
+    def _masterChanged(self, path, name):
+        self._obj.path = path
+        self._obj.name = name
+        self._commit()
+
+    @pyqtSlot()
+    def _commit(self):
+        self._ctrl.doc.doCommand(self._cmd)
+        self._cmd = sch.document.ObjChangeCmd(self._obj)
+        self.sigUpdate.emit()
+
+    @pyqtSlot()
+    def _docChanged(self):
+        # if document changed, it might be because the object got deleted; update state
+        # check that object is still part of the document
+        if not self._ctrl.doc.hasObject(self._obj):
+            self.sigDone.emit()
+            return
