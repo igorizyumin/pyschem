@@ -93,6 +93,10 @@ class NetTool(QObject):
     def inspector(self):
         return None
 
+    @staticmethod
+    def name():
+        return "Draw Net"
+
     def finish(self):
         self._firstPt = None
         self.sigUpdate.emit()

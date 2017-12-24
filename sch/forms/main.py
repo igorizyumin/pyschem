@@ -1,13 +1,16 @@
 from PyQt5.QtCore import pyqtSignal, pyqtSlot, Qt, QSettings, QVariant, QByteArray
-from PyQt5.QtWidgets import QMainWindow, QDockWidget, QMessageBox, QFileDialog, QWidget, QVBoxLayout
+from PyQt5 import QtWidgets
+from PyQt5.QtWidgets import QMainWindow, QDockWidget, QMessageBox, QFileDialog, QWidget, QVBoxLayout, QPushButton, QSpacerItem
 from sch.uic.ui_mainwindow import Ui_MainWindow
 from sch.uic.ui_toolsdock import Ui_ToolsDock
 from sch.view import SchView
-from sch.controller import Controller, ToolType
+from sch.controller import getCtrl
 from sch.document import MasterDocument, AbstractPage
 from sch.forms.projectdock import ProjectDock
 from sch.forms.inspector import InspectorDock
 from sch.library import PartLibrary
+from functools import partial
+import sip
 
 
 class MainWindow(QMainWindow):
@@ -149,17 +152,18 @@ class MainWindow(QMainWindow):
         self.disconnectActiveTab()
         if newTab is not None:
             # restore active tool
-            self.toolsDock.on_toolChanged(newTab.ctrl.toolType)
+            self.toolsDock.initTools(newTab.ctrl.tools())
+            self.toolsDock.on_toolChanged(newTab.ctrl.toolId)
             # connect signals
             newTab.undoChanged.connect(self.onTabUndoChanged)
             self.toolsDock.toolChanged.connect(newTab.ctrl.changeTool)
             newTab.ctrl.sigToolChanged.connect(self.toolsDock.on_toolChanged)
             newTab.ctrl.sigInspectorChanged.connect(self.onInspectorChanged)
             self.onTabUndoChanged(newTab.canUndo(), newTab.canRedo())
-            self.onInspectorChanged()
         else:
             self.onTabUndoChanged(False, False)
         self.activeTab = newTab
+        self.onInspectorChanged()
 
     def disconnectActiveTab(self):
         if self.activeTab is not None:
@@ -182,6 +186,7 @@ class MainWindow(QMainWindow):
         tab = PageTab(page, lib=self.lib)
         self.installTab(tab)
         self.ui.tabWidget.addTab(tab, page.name)
+        self.ui.tabWidget.setCurrentIndex(self.ui.tabWidget.indexOf(tab))
 
     @pyqtSlot(int)
     def on_tabWidget_currentChanged(self, idx):
@@ -205,7 +210,7 @@ class PageTab(QWidget):
         super().__init__(parent)
         self.view = SchView()
         self.doc = doc
-        self.ctrl = Controller(doc=self.doc, view=self.view, lib=lib)
+        self.ctrl = getCtrl(doc)(doc=self.doc, view=self.view, lib=lib)
         self.view.setCtrl(self.ctrl)
         self.doc.undoStack.canUndoChanged.connect(self._onUndoChanged)
         self.doc.undoStack.canRedoChanged.connect(self._onUndoChanged)
@@ -231,45 +236,55 @@ class PageTab(QWidget):
 
 
 class ToolsDock(QDockWidget):
-    toolChanged = pyqtSignal(ToolType)
+    toolChanged = pyqtSignal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.ui = Ui_ToolsDock()
         self.ui.setupUi(self)
+        self._tools = []
+        self._widgets = []
+        self._spacer = None
 
-    @pyqtSlot(ToolType)
-    def on_toolChanged(self, tool):
+    def _clear(self):
+        for w in self._widgets:
+            self.ui.verticalLayout.removeWidget(w)
+            w.setParent(None)
+            sip.delete(w)
+        self._widgets.clear()
+        if self._spacer:
+            self.ui.verticalLayout.removeItem(self._spacer)
+            sip.delete(self._spacer)
+            self._spacer = None
+
+    def initTools(self, tools):
+        def tc(i):
+            self.toolChanged.emit(i)
+        self._tools = tools
+        self._clear()
+        first = True
+        i = 0
+        for tool in self._tools:
+            b = QPushButton(self.ui.dockWidgetContents)
+            b.setCheckable(True)
+            b.setChecked(first)
+            b.setAutoExclusive(True)
+            b.setText(tool.name())
+            b.clicked.connect(partial(tc, i))
+            first = False
+            self._widgets.append(b)
+            self.ui.verticalLayout.addWidget(b)
+            i += 1
+        spacerItem = QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
+        self.ui.verticalLayout.addItem(spacerItem)
+        self._spacer = spacerItem
+        #self._widgets.append(spacerItem)
+
+    @pyqtSlot(int)
+    def on_toolChanged(self, idx):
         # print("tool changed: {}".format(tool))
         self.blockSignals(True)
-        if tool == ToolType.SelectTool:
-            self.ui.selectBtn.setChecked(True)
-        elif tool == ToolType.LineTool:
-            self.ui.lineBtn.setChecked(True)
-        elif tool == ToolType.NetTool:
-            self.ui.netBtn.setChecked(True)
-        elif tool == ToolType.TextTool:
-            self.ui.textBtn.setChecked(True)
-        elif tool == ToolType.PartTool:
-            self.ui.partBtn.setChecked(True)
+        self._widgets[idx].setChecked(True)
         self.blockSignals(False)
 
-    @pyqtSlot()
-    def on_selectBtn_clicked(self):
-        self.toolChanged.emit(ToolType.SelectTool)
 
-    @pyqtSlot()
-    def on_lineBtn_clicked(self):
-        self.toolChanged.emit(ToolType.LineTool)
-
-    @pyqtSlot()
-    def on_netBtn_clicked(self):
-        self.toolChanged.emit(ToolType.NetTool)
-
-    @pyqtSlot()
-    def on_textBtn_clicked(self):
-        self.toolChanged.emit(ToolType.TextTool)
-
-    @pyqtSlot()
-    def on_partBtn_clicked(self):
-        self.toolChanged.emit(ToolType.PartTool)

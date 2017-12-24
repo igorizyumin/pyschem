@@ -7,6 +7,7 @@ import sch.obj.text
 import sch.obj.part
 from sch.view import Event
 from sch.utils import Layer, LayerType
+import sch.document
 from copy import copy
 
 
@@ -18,9 +19,18 @@ class ToolType(Enum):
         PartTool = 4
 
 
+def getCtrl(doc):
+    if type(doc) is sch.document.DocPage:
+        return SchController
+    elif type(doc) is sch.document.SymbolPage:
+        return SymController
+    else:
+        raise NotImplementedError()
+
+
 class Controller(QObject):
     sigUpdate = pyqtSignal()
-    sigToolChanged = pyqtSignal(ToolType)
+    sigToolChanged = pyqtSignal(int)
     sigInspectorChanged = pyqtSignal()
 
     def __init__(self, doc=None, view=None, lib=None):
@@ -28,7 +38,7 @@ class Controller(QObject):
         self._view = None
         self._doc = None
         self._tool = None
-        self._toolType = ToolType.SelectTool
+        self._toolId = 0
         self._grid = 5000
         self.lib = lib
         # properties
@@ -48,14 +58,14 @@ class Controller(QObject):
                 self.view.recenter()
             elif event.key == Qt.Key_Enter:
                 self.handleEvent(Event(evType=Event.Type.Done))
-            elif event.key == Qt.Key_L:
-                self.changeTool(ToolType.LineTool)
-            elif event.key == Qt.Key_N:
-                self.changeTool(ToolType.NetTool)
-            elif event.key == Qt.Key_S:
-                self.changeTool(ToolType.SelectTool)
-            elif event.key == Qt.Key_T:
-                self.changeTool(ToolType.TextTool)
+            # elif event.key == Qt.Key_L:
+            #     self.changeTool(ToolType.LineTool)
+            # elif event.key == Qt.Key_N:
+            #     self.changeTool(ToolType.NetTool)
+            # elif event.key == Qt.Key_S:
+            #     self.changeTool(ToolType.SelectTool)
+            # elif event.key == Qt.Key_T:
+            #     self.changeTool(ToolType.TextTool)
             else:
                 event.handled = False
 
@@ -67,15 +77,15 @@ class Controller(QObject):
             return
         self._tool = tool
         self._tool.sigUpdate.connect(self.sigUpdate)
-        self.sigToolChanged.emit(self.toolType)
+        self.sigToolChanged.emit(self.toolId)
 
     def snapPt(self, pt: QPoint):
         g = self.grid
         return QPoint(int(round(float(pt.x())/g))*g, int(round(float(pt.y())/g))*g)
 
     @property
-    def toolType(self):
-        return self._toolType
+    def toolId(self):
+        return self._toolId
 
     @property
     def view(self):
@@ -121,22 +131,35 @@ class Controller(QObject):
             out.append(self._tool)
         return out
 
-    @pyqtSlot(ToolType)
-    def changeTool(self, tool):
-        if self._toolType == tool:
+    @pyqtSlot(int)
+    def changeTool(self, tool_id):
+        if self._toolId == tool_id:
             return
-        self._toolType = tool
-        if tool == ToolType.LineTool:
-            self._installTool(LineTool(self))
-        elif tool == ToolType.NetTool:
-            self._installTool(sch.obj.net.NetTool(self))
-        elif tool == ToolType.SelectTool:
-            self._installTool(SelectTool(self))
-        elif tool == ToolType.TextTool:
-            self._installTool(sch.obj.text.TextTool(self))
-        elif tool == ToolType.PartTool:
-            self._installTool(sch.obj.part.PartTool(self))
+        self._toolId = tool_id
+        self._installTool(self.tools()[tool_id](self))
         self.sigInspectorChanged.emit()
+
+    @staticmethod
+    def tools():
+        raise NotImplementedError()
+
+
+class SchController(Controller):
+    def __init__(self, doc=None, view=None, lib=None):
+        super().__init__(doc, view, lib)
+
+    @staticmethod
+    def tools():
+        return SelectTool, LineTool, sch.obj.net.NetTool,  sch.obj.text.TextTool, sch.obj.part.PartTool
+
+
+class SymController(Controller):
+    def __init__(self, doc=None, view=None, lib=None):
+        super().__init__(doc, view, lib)
+
+    @staticmethod
+    def tools():
+        return SelectTool, LineTool, sch.obj.text.TextTool
 
 
 class SelectTool(QObject):
@@ -154,6 +177,10 @@ class SelectTool(QObject):
         if self._editor:
             return self._editor.inspector
         return None
+
+    @staticmethod
+    def name():
+        return "Select"
 
     def finish(self):
         self.releaseSelection()

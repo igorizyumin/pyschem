@@ -163,6 +163,10 @@ class PartTool(QObject):
     def inspector(self):
         return self._inspector
 
+    @staticmethod
+    def name():
+        return "Place Part"
+
     def draw(self, painter):
         if self._obj:
             self._obj.draw(painter)

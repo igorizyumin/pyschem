@@ -147,6 +147,10 @@ class TextTool(QObject):
     def inspector(self):
         return self._inspector
 
+    @staticmethod
+    def name():
+        return "Add Text"
+
     def draw(self, painter):
         if self._obj is not None:
             self._obj.draw(painter)
