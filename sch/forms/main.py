@@ -174,7 +174,7 @@ class MainWindow(QMainWindow):
         self.activeTab = None
         self.onInspectorChanged()
 
-    @pyqtSlot(AbstractPage)
+    @pyqtSlot('PyQt_PyObject')
     def on_pageOpen(self, page):
         for i in range(self.ui.tabWidget.count()):
             t = self.ui.tabWidget.widget(i)

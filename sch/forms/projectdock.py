@@ -6,7 +6,7 @@ from sch.forms.treeutils import AbstractTreeNode, AbstractTreeModel
 
 
 class ProjectDock(QDockWidget):
-    openPage = pyqtSignal('QObject')
+    openPage = pyqtSignal('PyQt_PyObject')
 
     class PageElement(object):
         def __init__(self, page):
