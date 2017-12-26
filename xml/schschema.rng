@@ -223,6 +223,11 @@
       <attribute name="name">
         <data type="string"/>
       </attribute>
+      <element name="props">
+        <zeroOrMore>
+          <ref name="KeyValueProp"/>
+        </zeroOrMore>
+      </element>
       <element name="objects">
         <zeroOrMore>
           <ref name="SymObject"/>
@@ -248,26 +253,17 @@
       <attribute name="id">
         <data type="string"/>
       </attribute>
-      <!-- annotation (e.g. "nRST"); can be formatted with Markdown -->
+      <!-- annotation (e.g. "nRST") -->
       <attribute name="desc">
         <data type="string"/>
       </attribute>
       <ref name="CoordsAttr"/>
       <ref name="RotAttr"/>
-      <!-- annotation and number label locations / visibility -->
-      <element name="descText">
-        <ref name="PinTextAttrs"/>
-      </element>
-      <element name="numText">
-        <ref name="PinTextAttrs"/>
-      </element>
+      <zeroOrMore>
+        <!-- annotation and number label locations / visibility -->
+        <ref name="PropText"/>
+      </zeroOrMore>
     </element>
-  </define>
-  <define name="PinTextAttrs">
-    <ref name="TextPosAttr"/>
-    <attribute name="visible">
-      <ref name="Bool"/>
-    </attribute>
   </define>
   <define name="Line">
     <element name="line">
@@ -287,11 +283,12 @@
     <element name="proptext">
       <ref name="TextPosAttr"/>
       <ref name="TextFormatAttr"/>
-      <optional>
-        <attribute name="visible">
-          <ref name="Bool"/>
-        </attribute>
-      </optional>
+      <attribute name="visible">
+        <ref name="Bool"/>
+      </attribute>
+      <attribute name="showName">
+        <ref name="Bool"/>
+      </attribute>
       <attribute name="prop">
         <data type="string"/>
       </attribute>

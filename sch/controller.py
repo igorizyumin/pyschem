@@ -9,6 +9,7 @@ from sch.view import Event
 from sch.utils import Layer, LayerType
 import sch.document
 from copy import copy
+import sch.obj.proptext
 
 
 class ToolType(Enum):
@@ -159,7 +160,7 @@ class SymController(Controller):
 
     @staticmethod
     def tools():
-        return SelectTool, LineTool, sch.obj.text.TextTool
+        return SelectTool, LineTool, sch.obj.text.TextTool, sch.obj.proptext.PropTextTool
 
 
 class SelectTool(QObject):
@@ -246,6 +247,10 @@ class SelectTool(QObject):
             self._editor.sigDone.connect(self.releaseSelection)
         elif len(self._selection) == 1 and type(self._selection[0]) is sch.obj.part.PartObj:
             self._editor = sch.obj.part.PartEditor(self._ctrl, self._selection[0])
+            self._editor.sigUpdate.connect(self.sigUpdate)
+            self._editor.sigDone.connect(self.releaseSelection)
+        elif len(self._selection) == 1 and type(self._selection[0]) is sch.obj.proptext.PropTextObj:
+            self._editor = sch.obj.proptext.PropTextEditor(self._ctrl, self._selection[0])
             self._editor.sigUpdate.connect(self.sigUpdate)
             self._editor.sigDone.connect(self.releaseSelection)
         self._ctrl.sigInspectorChanged.emit()

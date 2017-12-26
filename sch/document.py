@@ -7,6 +7,7 @@ import sch.obj.line
 import sch.obj.net
 import sch.obj.text
 import sch.obj.part
+import sch.obj.proptext
 
 
 class MasterDocument(QObject):
@@ -228,16 +229,26 @@ class SymbolPage(AbstractPage):
     def __init__(self, parent: MasterDocument):
         super().__init__(parent)
         self._name = "symbol"
+        self._pageProps = {}
 
     def fromXml(self, symNode):
         self._name = symNode.attrib["name"]
+        props = symNode.find("props")
+        for prop in props:
+            self._pageProps[prop.attrib['name']]=prop.text
         objs = symNode.find("objects")
         for obj in objs:
             if obj.tag == "line":
                 self._objs.add(sch.obj.line.LineObj.fromXml(obj))
+            elif obj.tag == 'proptext':
+                self._objs.add(sch.obj.proptext.PropTextObj.fromXml(obj))
 
     def toXml(self, parentNode):
         page = etree.SubElement(parentNode, "symPart", name=self.name)
+        props = etree.SubElement(page, "props")
+        for key, value in self._pageProps:
+            pp = etree.SubElement(name=key)
+            pp.text = value
         objs = etree.SubElement(page, "objects")
         for obj in self._objs:
             obj.toXml(objs)

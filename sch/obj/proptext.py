@@ -77,7 +77,8 @@ class PropTextObj(sch.obj.text.TextBase):
                              fontFamily=self.family,
                              fontSize=str(self.ptSize),
                              visible="1" if self._vis else "0",
-                             showName="1" if self._showName else "0")
+                             showName="1" if self._showName else "0",
+                             prop=self.name)
 
     @staticmethod
     def fromXml(elem):
@@ -103,8 +104,8 @@ class PropTextTool(QObject):
         QObject.__init__(self)
         self._ctrl = ctrl
         self._pos = QPoint()
-        self._obj = TextObj("Text")
-        self._inspector = TextInspector(self._obj)
+        self._obj = PropTextObj()
+        self._inspector = PropTextInspector(self._obj)
         # self._inspector.edited.connect(self._commit)
 
     def finish(self):
@@ -118,7 +119,7 @@ class PropTextTool(QObject):
 
     @staticmethod
     def name():
-        return "Add Text"
+        return "Add Attribute Display"
 
     def draw(self, painter):
         if self._obj is not None:
@@ -150,7 +151,7 @@ class PropTextEditor(QObject):
         self._handle.sigMoved.connect(self._commit)
         self._ctrl.doc.sigChanged.connect(self._docChanged)
         self._cmd = sch.document.ObjChangeCmd(obj)
-        self._inspector = TextInspector(obj)
+        self._inspector = PropTextInspector(obj)
         self._inspector.edited.connect(self._commit)
 
     @property
@@ -201,7 +202,7 @@ class PropTextEditor(QObject):
         self._handle.pos = self._obj.pos
 
 
-class TextInspector(QWidget):
+class PropTextInspector(QWidget):
     edited = pyqtSignal()
 
     def __init__(self, obj, parent=None):
@@ -224,8 +225,8 @@ class TextInspector(QWidget):
         self._obj = new
         self._loadProperties(new)
 
-    def _loadProperties(self, obj: TextObj):
-        self.ui.text.setText(obj.text)
+    def _loadProperties(self, obj: PropTextObj):
+        self.ui.text.setText(obj._text)
         if obj.alignment & Qt.AlignLeft:
             if obj.alignment & Qt.AlignTop:
                 self.ui.btnTopLeft.setChecked(True)

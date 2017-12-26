@@ -62,7 +62,7 @@ class TextBase(object):
         self._tr.rotate(-(self.rot % 180))
         osx, osy = self._getOffset()
         self._tr.translate(-self._fm.width(self._text)*osx, self._fm.height()*(osy-1))
-        self._statictext = QStaticText(self.text)
+        self._statictext = QStaticText(self._text)
         self._statictext.setTextOption(QTextOption(self.alignment))
         self._statictext.prepare(font=self._font, matrix=self._tr)
 

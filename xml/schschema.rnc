@@ -83,6 +83,7 @@ SymPart = element symPart
     # identifies the sub-part
     # note: can be a vector; (e.g. inv[1:6] for a 6x inverter)
     attribute name { xsd:string },
+    element props { KeyValueProp* },
     element objects { SymObject* }
 }
 
