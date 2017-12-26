@@ -9,103 +9,34 @@ import sch.document
 from sch.view import Event
 from sch.uic.ui_textinspector import Ui_TextInspector
 import copy
+import sch.obj.text
 
 
-class TextBase(object):
-    def __init__(self, text, pos, alignment, family, size, rot):
-        self._text = text
-        self.pos = pos
-        self.rot = rot
-        self.alignment = alignment
-        self._family = family
-        self._ptSize = size
-        self._alignment = 0
-        self._scale = 1
-        self._rot = -1
-        self._pos = QPoint()
-        self._dirty = True
-
-    def _getOffset(self):
-        # 0, 0 = lower left when rot <= 180
-        # 0.5, 0.5 = center
-        # 1, 1 = upper right when rot <= 180
-        if self.alignment & Qt.AlignLeft:
-            h = -1
-        elif self.alignment & Qt.AlignRight:
-            h = 1
-        else:
-            h = 0
-        if self.alignment & Qt.AlignBottom:
-            v = -1
-        elif self.alignment & Qt.AlignTop:
-            v = 1
-        else:
-            v = 0
-        if self.rot >= 180:
-            h = -h
-            v = -v
-        return (h+1)/2.0, (v+1)/2.0
-
-    def _updateStaticText(self, scale, pos):
-        if self._scale == scale and self._rot == self.rot and self._pos == pos \
-                and self._alignment == self.alignment and not self._dirty:
-            return
-        self._dirty = False
-        self._scale = scale
-        self._alignment = self.alignment
-        self._rot = self.rot
-        self._font = QFont(self.family, self.ptSize*scale)
-        self._fm = QFontMetrics(self._font)
-        self._pos = pos
-        self._tr = QTransform()
-        self._tr.translate(pos.x(), pos.y())
-        self._tr.rotate(-(self.rot % 180))
-        osx, osy = self._getOffset()
-        self._tr.translate(-self._fm.width(self._text)*osx, self._fm.height()*(osy-1))
-        self._statictext = QStaticText(self.text)
-        self._statictext.setTextOption(QTextOption(self.alignment))
-        self._statictext.prepare(font=self._font, matrix=self._tr)
-
-    def draw(self, painter: QPainter):
-        painter.save()
-        tr = painter.transform()
-        pen = QPen(Layer.color(LayerType.annotate))
-        brush = QBrush(Layer.color(LayerType.annotate))
-        painter.setPen(pen)
-        painter.setBrush(brush)
-        pos = tr.map(self.pos)
-        self._updateStaticText(scale=abs(tr.m22()), pos=pos)
-        painter.setTransform(self._tr)
-        painter.setFont(self._font)
-        painter.drawStaticText(QPoint(0, 0), self._statictext)
-        painter.restore()
-        painter.drawLine(QPoint(0, 0), self.pos)
-
-    def bbox(self):
-        sz = (self._statictext.size() / self._scale).toSize().expandedTo(QSize(5000, 5000))
-        tr = QTransform()
-        tr.translate(self.pos.x(), self.pos.y())
-        tr.rotate(self.rot % 180)
-        osx, osy = self._getOffset()
-        tr.translate(-sz.width()*osx, -sz.height()*osy)
-        return tr.mapRect(QRect(QPoint(), sz))
-
-    def testHit(self, pt: QPoint, radius: int):
-        return self.bbox().contains(pt)
-
-
-class TextObj(TextBase):
-    def __init__(self, text, pos=QPoint(0, 0), alignment=Qt.AlignCenter,
-                 family="Helvetica", size=12*500, rot=0):
-        super().__init__(text, pos, alignment, family, size, rot)
+class PropTextObj(sch.obj.text.TextBase):
+    def __init__(self, name='attr', value='', pos=QPoint(0, 0), alignment=Qt.AlignCenter,
+                 family="Helvetica", size=12*500, rot=0, vis=True, showName=False):
+        super().__init__('{}={}'.format(name, value), pos, alignment, family, size, rot)
+        self._name = name
+        self._value = value
+        self._vis = vis
+        self._showName = showName
 
     @property
-    def text(self):
-        return self._text
+    def name(self):
+        return self._name
 
-    @text.setter
-    def text(self, txt):
-        self._text = txt
+    @name.setter
+    def name(self, v):
+        self._name = v
+        self._dirty = True
+
+    @property
+    def value(self):
+        return self._value
+
+    @value.setter
+    def value(self, v):
+        self._value = v
         self._dirty = True
 
     @property
@@ -137,19 +68,19 @@ class TextObj(TextBase):
             valign = "top"
         elif self.alignment & Qt.AlignBottom:
             valign = "bottom"
-        t = etree.SubElement(parent, "text",
+        t = etree.SubElement(parent, "proptext",
                              x=str(self.pos.x()),
                              y=str(self.pos.y()),
                              rot=str(self.rot),
                              hAlign=halign,
                              vAlign=valign,
                              fontFamily=self.family,
-                             fontSize=str(self.ptSize))
-        t.text = self.text
+                             fontSize=str(self.ptSize),
+                             visible="1" if self._vis else "0",
+                             showName="1" if self._showName else "0")
 
     @staticmethod
     def fromXml(elem):
-        text = elem.text
         pos = QPoint(int(elem.attrib['x']), int(elem.attrib['y']))
         ha = elem.attrib['hAlign']
         va = elem.attrib['vAlign']
@@ -157,10 +88,15 @@ class TextObj(TextBase):
         vd = {"top": Qt.AlignTop, "middle": Qt.AlignVCenter, "bottom": Qt.AlignBottom}
         alignment = hd[ha] | vd[va]
         rot = int(elem.attrib['rot'])
-        return TextObj(text, pos, alignment, elem.attrib['fontFamily'], int(elem.attrib['fontSize']), rot)
+        ff = elem.attrib['fontFamily']
+        fs = int(elem.attrib['fontSize'])
+        name = elem.attrib['prop']
+        vis = elem.attrib['visible'] == '1'
+        namevis = elem.attrib['showName'] == '1'
+        return PropTextObj(name, '', pos, alignment, ff, fs, rot, vis, namevis)
 
 
-class TextTool(QObject):
+class PropTextTool(QObject):
     sigUpdate = pyqtSignal()
 
     def __init__(self, ctrl):
@@ -201,7 +137,7 @@ class TextTool(QObject):
             e.handled = True
 
 
-class TextEditor(QObject):
+class PropTextEditor(QObject):
     sigUpdate = pyqtSignal()
     sigDone = pyqtSignal()
 

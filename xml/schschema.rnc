@@ -94,16 +94,13 @@ Pin = element pin
     # logical identifier (e.g. "in[3:0]" or "21" or "B3")
     # identifiers can be either pin numbers or they can be logical names or buses
     attribute id { xsd:string },
-    # annotation (e.g. "nRST"); can be formatted with Markdown
+    # annotation (e.g. "nRST")
     attribute desc { xsd:string },
 	CoordsAttr,
 	RotAttr,
 	# annotation and number label locations / visibility
-	element descText { PinTextAttrs },
-	element numText { PinTextAttrs }
+	PropText*
 }
-
-PinTextAttrs = (TextPosAttr, attribute visible { Bool })
 
 Line = element line
 {
@@ -123,7 +120,8 @@ PropText = element proptext
 {
     TextPosAttr,
     TextFormatAttr,
-    attribute visible { Bool }?,
+    attribute visible { Bool },
+    attribute showName { Bool },
     attribute prop { xsd:string }
 }
 

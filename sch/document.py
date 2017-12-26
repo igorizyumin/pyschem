@@ -1,6 +1,5 @@
 import copy
 from uuid import UUID, uuid4
-
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import QUndoStack, QUndoCommand
 from lxml import etree
@@ -22,6 +21,7 @@ class MasterDocument(QObject):
         self._pages = []
         self.lib = lib
         self.fileName = None
+        self.symProps = {}
 
     def name(self):
         if self.fileName is not None:
@@ -89,6 +89,10 @@ class MasterDocument(QObject):
                         newp.fromXml(obj)
                         newp.sigChanged.connect(self.sigCleanChanged)
                         self._symbols.append(newp)
+                    elif obj.tag == "props":
+                        for pr in obj:
+                            if pr.tag == 'prop':
+                                self.symProps[pr.attrib['name']] = pr.text
             elif child.tag == "pages":
                 for pg in child:
                     newp = DocPage(self)
