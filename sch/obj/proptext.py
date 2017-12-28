@@ -7,19 +7,26 @@ from sch.utils import *
 import sch.controller
 import sch.document
 from sch.view import Event
-from sch.uic.ui_textinspector import Ui_TextInspector
+from sch.uic.ui_proptextinspector import Ui_PropTextInspector
 import copy
 import sch.obj.text
 
 
 class PropTextObj(sch.obj.text.TextBase):
-    def __init__(self, name='attr', value='', pos=QPoint(0, 0), alignment=Qt.AlignCenter,
+    def __init__(self, doc, name='attr', pos=QPoint(0, 0), alignment=Qt.AlignCenter,
                  family="Helvetica", size=12*500, rot=0, vis=True, showName=False):
-        super().__init__('{}={}'.format(name, value), pos, alignment, family, size, rot)
+        super().__init__('', pos, alignment, family, size, rot)
+        self._doc = doc
         self._name = name
-        self._value = value
         self._vis = vis
         self._showName = showName
+        self._updText()
+
+    def _updText(self):
+        if self._showName:
+            self._text = "{}={}".format(self.name, self.value)
+        else:
+            self._text = self.value
 
     @property
     def name(self):
@@ -28,15 +35,17 @@ class PropTextObj(sch.obj.text.TextBase):
     @name.setter
     def name(self, v):
         self._name = v
+        self._updText()
         self._dirty = True
 
     @property
     def value(self):
-        return self._value
+        return self._doc.getProp(self.name)
 
     @value.setter
     def value(self, v):
-        self._value = v
+        self._doc.setProp(self.name, v)
+        self._updText()
         self._dirty = True
 
     @property
@@ -55,6 +64,25 @@ class PropTextObj(sch.obj.text.TextBase):
     @ptSize.setter
     def ptSize(self, sz):
         self._ptSize = sz
+        self._dirty = True
+
+    @property
+    def vis(self):
+        return self._vis
+
+    @vis.setter
+    def vis(self, v):
+        self._vis = v
+        self._dirty = True
+
+    @property
+    def showName(self):
+        return self._showName
+
+    @showName.setter
+    def showName(self, v):
+        self._showName = v
+        self._updText()
         self._dirty = True
 
     def toXml(self, parent):
@@ -81,7 +109,7 @@ class PropTextObj(sch.obj.text.TextBase):
                              prop=self.name)
 
     @staticmethod
-    def fromXml(elem):
+    def fromXml(elem, doc):
         pos = QPoint(int(elem.attrib['x']), int(elem.attrib['y']))
         ha = elem.attrib['hAlign']
         va = elem.attrib['vAlign']
@@ -94,7 +122,7 @@ class PropTextObj(sch.obj.text.TextBase):
         name = elem.attrib['prop']
         vis = elem.attrib['visible'] == '1'
         namevis = elem.attrib['showName'] == '1'
-        return PropTextObj(name, '', pos, alignment, ff, fs, rot, vis, namevis)
+        return PropTextObj(doc, name, pos, alignment, ff, fs, rot, vis, namevis)
 
 
 class PropTextTool(QObject):
@@ -104,7 +132,7 @@ class PropTextTool(QObject):
         QObject.__init__(self)
         self._ctrl = ctrl
         self._pos = QPoint()
-        self._obj = PropTextObj()
+        self._obj = PropTextObj(self._ctrl.doc)
         self._inspector = PropTextInspector(self._obj)
         # self._inspector.edited.connect(self._commit)
 
@@ -207,7 +235,7 @@ class PropTextInspector(QWidget):
 
     def __init__(self, obj, parent=None):
         super().__init__(parent)
-        self.ui = Ui_TextInspector()
+        self.ui = Ui_PropTextInspector()
         self.ui.setupUi(self)
         self._obj = None
         fontSizes = list(range(6, 16)) + list(range(16, 34, 2)) + list(range(36, 48, 4)) + \
@@ -226,7 +254,10 @@ class PropTextInspector(QWidget):
         self._loadProperties(new)
 
     def _loadProperties(self, obj: PropTextObj):
-        self.ui.text.setText(obj._text)
+        self.ui.cbProp.setCurrentText(obj.name)
+        self.ui.leValue.setText(obj.value)
+        self.ui.cbVis.setChecked(obj.vis)
+        self.ui.cbShowName.setChecked(obj.showName)
         if obj.alignment & Qt.AlignLeft:
             if obj.alignment & Qt.AlignTop:
                 self.ui.btnTopLeft.setChecked(True)
@@ -274,12 +305,6 @@ class PropTextInspector(QWidget):
         self.obj.alignment = align
         self.edited.emit()
 
-    @pyqtSlot(str)
-    def on_text_textEdited(self, text):
-        if self.obj:
-            self.obj.text = text
-            self.edited.emit()
-
     @pyqtSlot(QFont)
     def on_fontFace_currentFontChanged(self, font):
         if self.obj:
@@ -290,4 +315,28 @@ class PropTextInspector(QWidget):
     def on_fontSize_editTextChanged(self, text):
         if self.obj:
             self.obj.ptSize = int(float(text)*500)
+            self.edited.emit()
+
+    @pyqtSlot(str)
+    def on_cbProp_currentTextChanged(self, text):
+        if self.obj:
+            self.obj.name = text
+            self.edited.emit()
+
+    @pyqtSlot(str)
+    def on_leValue_textEdited(self, text):
+        if self.obj:
+            self.obj.value = text
+            self.edited.emit()
+
+    @pyqtSlot(bool)
+    def on_cbVis_toggled(self, chkd):
+        if self.obj:
+            self.obj.vis = chkd
+            self.edited.emit()
+
+    @pyqtSlot(bool)
+    def on_cbShowName_toggled(self, chkd):
+        if self.obj:
+            self.obj.showName = chkd
             self.edited.emit()

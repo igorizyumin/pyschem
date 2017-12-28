@@ -231,6 +231,15 @@ class SymbolPage(AbstractPage):
         self._name = "symbol"
         self._pageProps = {}
 
+    def getProp(self, name):
+        if name in self._pageProps:
+            return self._pageProps[name]
+        else:
+            return ''
+
+    def setProp(self, name, value):
+        self._pageProps[name] = value
+
     def fromXml(self, symNode):
         self._name = symNode.attrib["name"]
         props = symNode.find("props")
@@ -241,13 +250,13 @@ class SymbolPage(AbstractPage):
             if obj.tag == "line":
                 self._objs.add(sch.obj.line.LineObj.fromXml(obj))
             elif obj.tag == 'proptext':
-                self._objs.add(sch.obj.proptext.PropTextObj.fromXml(obj))
+                self._objs.add(sch.obj.proptext.PropTextObj.fromXml(obj, self))
 
     def toXml(self, parentNode):
         page = etree.SubElement(parentNode, "symPart", name=self.name)
         props = etree.SubElement(page, "props")
-        for key, value in self._pageProps:
-            pp = etree.SubElement(name=key)
+        for key, value in self._pageProps.items():
+            pp = etree.SubElement(props, "prop", name=key)
             pp.text = value
         objs = etree.SubElement(page, "objects")
         for obj in self._objs:

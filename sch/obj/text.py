@@ -24,6 +24,7 @@ class TextBase(object):
         self._rot = -1
         self._pos = QPoint()
         self._dirty = True
+        self._statictext = QStaticText()
 
     def _getOffset(self):
         # 0, 0 = lower left when rot <= 180

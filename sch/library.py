@@ -30,10 +30,13 @@ class PartLibrary(QObject):
                 d.setNameFilters(['*.xsch'])
                 files = d.entryList()
                 for f in files:
-                    fp = d.filePath(f)
-                    doc = MasterDocument(self)
-                    doc.loadFromFile(fp)
-                    self._docs[fp] = doc
+                    try:
+                        fp = d.filePath(f)
+                        doc = MasterDocument(self)
+                        doc.loadFromFile(fp)
+                        self._docs[fp] = doc
+                    except Exception as e:
+                        print("Exception loading {}: {}".format(f, str(e)))
 
     def getSymList(self):
         out = []
