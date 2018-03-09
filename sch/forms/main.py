@@ -11,6 +11,7 @@ from sch.forms.inspector import InspectorDock
 from sch.library import PartLibrary
 from functools import partial
 import sip
+import traceback
 
 
 class MainWindow(QMainWindow):
@@ -130,6 +131,7 @@ class MainWindow(QMainWindow):
                 self.ui.statusbar.showMessage("Document loaded", 5000)
             except Exception as e:
                 self.ui.statusbar.showMessage("Error loading document: {}: {}".format(str(type(e)), str(e)), 5000)
+                traceback.print_exc()
 
     @pyqtSlot()
     def on_actionUndo_triggered(self):

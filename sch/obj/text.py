@@ -9,6 +9,7 @@ import sch.document
 from sch.view import Event
 from sch.uic.ui_textinspector import Ui_TextInspector
 import copy
+import math
 
 
 class TextBase(object):
@@ -47,7 +48,7 @@ class TextBase(object):
             v = -v
         return (h+1)/2.0, (v+1)/2.0
 
-    def _updateStaticText(self, scale, pos):
+    def _updateStaticText(self, scale, pos, rot):
         if self._scale == scale and self._rot == self.rot and self._pos == pos \
                 and self._alignment == self.alignment and not self._dirty:
             return
@@ -60,7 +61,7 @@ class TextBase(object):
         self._pos = pos
         self._tr = QTransform()
         self._tr.translate(pos.x(), pos.y())
-        self._tr.rotate(-(self.rot % 180))
+        self._tr.rotate(-((self.rot+rot) % 180))
         osx, osy = self._getOffset()
         self._tr.translate(-self._fm.width(self._text)*osx, self._fm.height()*(osy-1))
         self._statictext = QStaticText(self._text)
@@ -75,7 +76,12 @@ class TextBase(object):
         painter.setPen(pen)
         painter.setBrush(brush)
         pos = tr.map(self.pos)
-        self._updateStaticText(scale=abs(tr.m22()), pos=pos)
+        pt0 = tr.map(QPointF(0, 0))
+        pt1 = tr.map(QPointF(1, 0))
+        delta = pt1-pt0
+        rot = int(math.atan2(delta.y(), delta.x())/math.pi*180)
+        scale = abs(delta.x() + delta.y())
+        self._updateStaticText(scale=scale, pos=pos, rot=rot)
         painter.setTransform(self._tr)
         painter.setFont(self._font)
         painter.drawStaticText(QPoint(0, 0), self._statictext)

@@ -160,10 +160,15 @@ class AbstractPage(QObject):
         self.undoStack.push(cmd)
         self.sigChanged.emit()
 
-    def objects(self, objType=None):
-        if not objType:
+    def objects(self, objType=None, exclude=None):
+        if not objType and not exclude:
             return set(self._objs)
-        return {obj for obj in self._objs if type(obj) is objType}
+        if exclude is None:
+            exclude = ()
+        if objType:
+            return {obj for obj in self._objs if type(obj) is objType and not (type(obj) in exclude)}
+        else:
+            return {obj for obj in self._objs if not (type(obj) in exclude)}
 
     def hasObject(self, obj):
         return obj in self._objs
@@ -244,13 +249,15 @@ class SymbolPage(AbstractPage):
         self._name = symNode.attrib["name"]
         props = symNode.find("props")
         for prop in props:
-            self._pageProps[prop.attrib['name']]=prop.text
+            self._pageProps[prop.attrib['name']] = prop.text
         objs = symNode.find("objects")
         for obj in objs:
             if obj.tag == "line":
                 self._objs.add(sch.obj.line.LineObj.fromXml(obj))
             elif obj.tag == 'proptext':
                 self._objs.add(sch.obj.proptext.PropTextObj.fromXml(obj, self))
+            elif obj.tag == 'text':
+                self._objs.add(sch.obj.text.TextObj.fromXml(obj))
 
     def toXml(self, parentNode):
         page = etree.SubElement(parentNode, "symPart", name=self.name)

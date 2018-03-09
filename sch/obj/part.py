@@ -3,6 +3,7 @@ from PyQt5.QtGui import QPainter, QPen, QTransform
 from PyQt5.QtWidgets import QWidget, QListWidgetItem
 import sch.document
 import sch.controller
+import sch.obj.proptext
 from sch.uic.ui_partinspector import Ui_PartInspector
 from sch.utils import LayerType, Layer, Geom
 from lxml import etree
@@ -26,6 +27,7 @@ class PartObj(object):
         self.rot = rot
         self.mirror = mirror
         self._masterBbox = None
+        self._proptexts = []
 
     @property
     def pos(self):
@@ -65,6 +67,7 @@ class PartObj(object):
     def path(self, new):
         self._path = new
         self._updateMaster()
+        self._resetProps()
 
     @property
     def name(self):
@@ -90,7 +93,7 @@ class PartObj(object):
     def _updateMasterBbox(self):
         bb = None
         if self._master:
-            for obj in self._master.objects():
+            for obj in self._master.objects(exclude={sch.obj.proptext.PropTextObj}):
                 if bb is not None:
                     bb |= obj.bbox()
                 else:
@@ -105,13 +108,23 @@ class PartObj(object):
         self._bb = QRect(self._tr.map(self._masterBbox.topLeft()),
                          self._tr.map(self._masterBbox.bottomRight())).normalized()
 
+    def _resetProps(self):
+        self._proptexts = []
+        if self._master:
+            for prop in self._master.objects(objType=sch.obj.proptext.PropTextObj):
+                c = copy.copy(prop)
+                c.doc = self
+                self._proptexts.append(c)
+
     def draw(self, painter: QPainter):
         if self._master is None:
             return
         self._updateTransform()
         painter.save()
         painter.setTransform(self._tr, True)
-        for obj in self._master.objects():
+        for obj in self._master.objects(exclude={sch.obj.proptext.PropTextObj}):
+            obj.draw(painter)
+        for obj in self._proptexts:
             obj.draw(painter)
         painter.restore()
 
@@ -123,8 +136,11 @@ class PartObj(object):
     def testHit(self, pt: QPoint, radius: int):
         return self.bbox().contains(pt)
 
+    def getProp(self, attr):
+        return "default"
+
     def toXml(self, parent):
-        etree.SubElement(parent, "part",
+        part = etree.SubElement(parent, "part",
                          schPath=self.path,
                          partId=self.name,
                          x=str(self.pos.x()),
@@ -132,15 +148,21 @@ class PartObj(object):
                          rot=str(self.rot),
                          mirror="1" if self.mirror else "0"
                          )
+        for pt in self._proptexts:
+            pt.toXml(part)
 
     @staticmethod
     def fromXml(elem, lib):
         obj = PartObj(lib)
-        obj.path = elem.attrib['schPath']
         obj.name = elem.attrib['partId']
         obj.pos = QPoint(int(elem.attrib['x']), int(elem.attrib['y']))
         obj.rot = int(elem.attrib['rot'])
         obj.mirror = (elem.attrib['mirror'] == '1')
+        obj.path = elem.attrib['schPath']
+        obj._proptexts = []
+        for sub in elem:
+            if sub.tag == 'proptext':
+                obj._proptexts.append(sch.obj.proptext.PropTextObj.fromXml(sub, obj))
         return obj
 
 

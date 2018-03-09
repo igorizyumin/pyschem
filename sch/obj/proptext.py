@@ -76,6 +76,16 @@ class PropTextObj(sch.obj.text.TextBase):
         self._dirty = True
 
     @property
+    def doc(self):
+        return self._doc
+
+    @doc.setter
+    def doc(self, newdoc):
+        self._doc = newdoc
+        self._updText()
+        self._dirty = True
+
+    @property
     def showName(self):
         return self._showName
 
