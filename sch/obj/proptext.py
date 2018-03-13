@@ -203,8 +203,6 @@ class PropTextEditor(QObject):
             if e.key == Qt.Key_R:
                 self._obj.rot = (self._obj.rot + 90) % 360
                 self._commit()
-        elif e.evType == Event.Type.MouseDblClicked:
-            print("dbl click event")
         self._handle.handleEvent(e)
 
     def draw(self, painter):
@@ -218,12 +216,12 @@ class PropTextEditor(QObject):
 
     @pyqtSlot('QPoint')
     def _drag(self, pos):
-        self._obj.pos = pos
+        self._obj.setPosGlobal(pos)
         self.sigUpdate.emit()
 
     @pyqtSlot()
     def _commit(self):
-        self._obj.pos = self._handle.pos
+        self._obj.setPosGlobal(self._handle.pos)
         self._ctrl.doc.doCommand(self._cmd)
         self._cmd = sch.document.ObjChangeCmd(self._obj)
         self.sigUpdate.emit()
@@ -236,7 +234,7 @@ class PropTextEditor(QObject):
             self.sigDone.emit()
             return
         # object still there, just update handle positions
-        self._handle.pos = self._obj.pos
+        self._handle.pos = self._obj.posGlobal()
 
 
 class PropTextInspector(QWidget):

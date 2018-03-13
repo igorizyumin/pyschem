@@ -228,7 +228,7 @@ class DocPage(AbstractPage):
     def toXml(self, parentNode):
         page = etree.SubElement(parentNode, "page", name=self.name)
         objs = etree.SubElement(page, "objects")
-        for obj in self._objs:
+        for obj in self.objects(exclude={sch.obj.proptext.PropTextObj}):
             obj.toXml(objs)
 
 

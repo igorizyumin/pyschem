@@ -49,6 +49,19 @@ class TextBase(object):
             v = -v
         return (h+1)/2.0, (v+1)/2.0
 
+    def setPosGlobal(self, pos):
+        if self._parent:
+            self.pos = self._parent.transform().inverted()[0].map(pos)
+        else:
+            self.pos = pos
+        self._dirty = True
+
+    def posGlobal(self):
+        if self._parent:
+            return self._parent.transform().map(self.pos)
+        else:
+            return self.pos
+
     def _updateStaticText(self, scale, pos, rot):
         if self._scale == scale and self._rot == self.rot and self._pos == pos \
                 and self._alignment == self.alignment and not self._dirty:
@@ -72,6 +85,8 @@ class TextBase(object):
     def draw(self, painter: QPainter):
         painter.save()
         tr = painter.transform()
+        if self._parent:
+            tr = self._parent.transform() * tr
         pen = QPen(Layer.color(LayerType.annotate))
         brush = QBrush(Layer.color(LayerType.annotate))
         painter.setPen(pen)
@@ -87,7 +102,7 @@ class TextBase(object):
         painter.setFont(self._font)
         painter.drawStaticText(QPoint(0, 0), self._statictext)
         painter.restore()
-        painter.drawLine(QPoint(0, 0), self.pos)
+
 
     def bbox(self):
         sz = (self._statictext.size() / self._scale).toSize().expandedTo(QSize(5000, 5000))

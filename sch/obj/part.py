@@ -23,7 +23,6 @@ class PartObj(object):
         self._pos = None
         self._tr = None
         self._bb = None
-        self._mbb = None
         self.pos = QPoint(pos)
         self.rot = rot
         self.mirror = mirror
@@ -42,7 +41,6 @@ class PartObj(object):
         self._pos = new
         self._tr = None
         self._bb = None
-        self._mbb = None
 
     @property
     def rot(self):
@@ -53,7 +51,6 @@ class PartObj(object):
         self._rot = new
         self._tr = None
         self._bb = None
-        self._mbb = None
 
     @property
     def mirror(self):
@@ -64,7 +61,6 @@ class PartObj(object):
         self._mirror = new
         self._tr = None
         self._bb = None
-        self._mbb = None
 
     @property
     def path(self):
@@ -89,7 +85,6 @@ class PartObj(object):
         self._master = self._lib.getSym(self.path, self.name)
         self._updateMasterBbox()
         self._bb = None
-        self._mbb = None
 
     def _updateTransform(self):
         if self._tr is None:
@@ -120,10 +115,6 @@ class PartObj(object):
             return
         self._bb = QRect(self._tr.map(self._masterBbox.topLeft()),
                          self._tr.map(self._masterBbox.bottomRight())).normalized()
-        self._mbb = QRect(self._bb)
-        for pt in self._proptexts:
-            self._bb |= QRect(self._tr.map(pt.bbox().topLeft()),
-                              self._tr.map(pt.bbox().bottomRight())).normalized()
 
     def _resetProps(self):
         self._proptexts = []
@@ -154,7 +145,7 @@ class PartObj(object):
         for txt in self._proptexts:
             if txt.bbox().contains(self._tr.inverted()[0].map(pt)):
                 return True
-        return self._mbb.contains(pt)
+        return self.bbox().contains(pt)
 
     def getProp(self, attr):
         return "default"

@@ -214,7 +214,6 @@ class SelectTool(QObject):
                     if ind >= len(self._lastFind):
                         ind = 0
                     self._selection = [objs[ind]]
-
                 else:
                     self._lastFind = objs
                     self._selection = [objs[0]]
@@ -302,7 +301,7 @@ class EditHandle(QObject):
 
 class TextHandle(EditHandle):
     def __init__(self, ctrl, txt):
-        super().__init__(ctrl, txt.pos)
+        super().__init__(ctrl, txt.posGlobal())
         self._txt = txt
         self._start = QPoint()
 
