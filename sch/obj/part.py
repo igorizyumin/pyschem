@@ -23,11 +23,15 @@ class PartObj(object):
         self._pos = None
         self._tr = None
         self._bb = None
+        self._mbb = None
         self.pos = QPoint(pos)
         self.rot = rot
         self.mirror = mirror
         self._masterBbox = None
         self._proptexts = []
+
+    def children(self):
+        return self._proptexts
 
     @property
     def pos(self):
@@ -38,6 +42,7 @@ class PartObj(object):
         self._pos = new
         self._tr = None
         self._bb = None
+        self._mbb = None
 
     @property
     def rot(self):
@@ -48,6 +53,7 @@ class PartObj(object):
         self._rot = new
         self._tr = None
         self._bb = None
+        self._mbb = None
 
     @property
     def mirror(self):
@@ -58,6 +64,7 @@ class PartObj(object):
         self._mirror = new
         self._tr = None
         self._bb = None
+        self._mbb = None
 
     @property
     def path(self):
@@ -82,6 +89,7 @@ class PartObj(object):
         self._master = self._lib.getSym(self.path, self.name)
         self._updateMasterBbox()
         self._bb = None
+        self._mbb = None
 
     def _updateTransform(self):
         if self._tr is None:
@@ -89,6 +97,10 @@ class PartObj(object):
             self._tr.translate(self.pos.x(), self.pos.y())
             self._tr.scale(-1 if self.mirror else 1, 1)
             self._tr.rotate(-self.rot)
+
+    def transform(self):
+        self._updateTransform()
+        return self._tr
 
     def _updateMasterBbox(self):
         bb = None
@@ -104,9 +116,14 @@ class PartObj(object):
         self._updateTransform()
         if self._masterBbox is None:
             self._bb = QRect()
+            self._mbb = QRect()
             return
         self._bb = QRect(self._tr.map(self._masterBbox.topLeft()),
                          self._tr.map(self._masterBbox.bottomRight())).normalized()
+        self._mbb = QRect(self._bb)
+        for pt in self._proptexts:
+            self._bb |= QRect(self._tr.map(pt.bbox().topLeft()),
+                              self._tr.map(pt.bbox().bottomRight())).normalized()
 
     def _resetProps(self):
         self._proptexts = []
@@ -124,8 +141,6 @@ class PartObj(object):
         painter.setTransform(self._tr, True)
         for obj in self._master.objects(exclude={sch.obj.proptext.PropTextObj}):
             obj.draw(painter)
-        for obj in self._proptexts:
-            obj.draw(painter)
         painter.restore()
 
     def bbox(self):
@@ -134,7 +149,12 @@ class PartObj(object):
         return self._bb
 
     def testHit(self, pt: QPoint, radius: int):
-        return self.bbox().contains(pt)
+        if self._bb is None:
+            self._updateBbox()
+        for txt in self._proptexts:
+            if txt.bbox().contains(self._tr.inverted()[0].map(pt)):
+                return True
+        return self._mbb.contains(pt)
 
     def getProp(self, attr):
         return "default"

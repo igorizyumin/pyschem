@@ -221,7 +221,9 @@ class DocPage(AbstractPage):
             elif obj.tag == "text":
                 self._objs.add(sch.obj.text.TextObj.fromXml(obj))
             elif obj.tag == "part":
-                self._objs.add(sch.obj.part.PartObj.fromXml(obj, self._parent.lib))
+                part = sch.obj.part.PartObj.fromXml(obj, self._parent.lib)
+                self._objs.add(part)
+                self._objs |= set(part.children())
 
     def toXml(self, parentNode):
         page = etree.SubElement(parentNode, "page", name=self.name)

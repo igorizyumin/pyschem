@@ -13,10 +13,9 @@ import sch.obj.text
 
 
 class PropTextObj(sch.obj.text.TextBase):
-    def __init__(self, doc, name='attr', pos=QPoint(0, 0), alignment=Qt.AlignCenter,
+    def __init__(self, parent, name='attr', pos=QPoint(0, 0), alignment=Qt.AlignCenter,
                  family="Helvetica", size=12*500, rot=0, vis=True, showName=False):
-        super().__init__('', pos, alignment, family, size, rot)
-        self._doc = doc
+        super().__init__('', pos, alignment, family, size, rot, parent=parent)
         self._name = name
         self._vis = vis
         self._showName = showName
@@ -40,11 +39,11 @@ class PropTextObj(sch.obj.text.TextBase):
 
     @property
     def value(self):
-        return self._doc.getProp(self.name)
+        return self._parent.getProp(self.name)
 
     @value.setter
     def value(self, v):
-        self._doc.setProp(self.name, v)
+        self._parent.setProp(self.name, v)
         self._updText()
         self._dirty = True
 
@@ -76,12 +75,12 @@ class PropTextObj(sch.obj.text.TextBase):
         self._dirty = True
 
     @property
-    def doc(self):
+    def parent(self):
         return self._doc
 
-    @doc.setter
-    def doc(self, newdoc):
-        self._doc = newdoc
+    @parent.setter
+    def parent(self, newparent):
+        self._parent = newparent
         self._updText()
         self._dirty = True
 
@@ -119,7 +118,7 @@ class PropTextObj(sch.obj.text.TextBase):
                              prop=self.name)
 
     @staticmethod
-    def fromXml(elem, doc):
+    def fromXml(elem, parent):
         pos = QPoint(int(elem.attrib['x']), int(elem.attrib['y']))
         ha = elem.attrib['hAlign']
         va = elem.attrib['vAlign']
@@ -132,7 +131,7 @@ class PropTextObj(sch.obj.text.TextBase):
         name = elem.attrib['prop']
         vis = elem.attrib['visible'] == '1'
         namevis = elem.attrib['showName'] == '1'
-        return PropTextObj(doc, name, pos, alignment, ff, fs, rot, vis, namevis)
+        return PropTextObj(parent, name, pos, alignment, ff, fs, rot, vis, namevis)
 
 
 class PropTextTool(QObject):

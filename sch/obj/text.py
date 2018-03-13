@@ -13,7 +13,7 @@ import math
 
 
 class TextBase(object):
-    def __init__(self, text, pos, alignment, family, size, rot):
+    def __init__(self, text, pos, alignment, family, size, rot, parent=None):
         self._text = text
         self.pos = pos
         self.rot = rot
@@ -26,6 +26,7 @@ class TextBase(object):
         self._pos = QPoint()
         self._dirty = True
         self._statictext = QStaticText()
+        self._parent = parent
 
     def _getOffset(self):
         # 0, 0 = lower left when rot <= 180
@@ -95,7 +96,11 @@ class TextBase(object):
         tr.rotate(self.rot % 180)
         osx, osy = self._getOffset()
         tr.translate(-sz.width()*osx, -sz.height()*osy)
-        return tr.mapRect(QRect(QPoint(), sz))
+        br = tr.mapRect(QRect(QPoint(), sz))
+        if self._parent:
+            return self._parent.transform().mapRect(br)
+        else:
+            return br
 
     def testHit(self, pt: QPoint, radius: int):
         return self.bbox().contains(pt)
