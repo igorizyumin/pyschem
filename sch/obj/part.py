@@ -150,6 +150,9 @@ class PartObj(object):
     def getProp(self, attr):
         return "default"
 
+    def setProp(self, attr, value):
+        pass
+
     def toXml(self, parent):
         part = etree.SubElement(parent, "part",
                          schPath=self.path,
