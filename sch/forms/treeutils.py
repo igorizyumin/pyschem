@@ -1,4 +1,4 @@
-from PyQt5.QtCore import QAbstractItemModel, QModelIndex
+from PySide6.QtCore import QAbstractItemModel, QModelIndex
 
 
 class AbstractTreeNode(object):

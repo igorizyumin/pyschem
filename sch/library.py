@@ -1,4 +1,4 @@
-from PyQt5.QtCore import *
+from PySide6.QtCore import *
 from sch.document import *
 
 

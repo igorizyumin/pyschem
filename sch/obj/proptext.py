@@ -1,6 +1,7 @@
-from PyQt5.QtCore import *
-from PyQt5.QtGui import *
-from PyQt5.QtWidgets import QUndoCommand, QWidget
+from PySide6.QtCore import *
+from PySide6.QtGui import *
+from PySide6.QtWidgets import QWidget
+from PySide6.QtCore import Signal, Slot
 from enum import Enum
 from lxml import etree
 from sch.utils import *
@@ -135,7 +136,7 @@ class PropTextObj(sch.obj.text.TextBase):
 
 
 class PropTextTool(QObject):
-    sigUpdate = pyqtSignal()
+    sigUpdate = Signal()
 
     def __init__(self, ctrl):
         QObject.__init__(self)
@@ -176,8 +177,8 @@ class PropTextTool(QObject):
 
 
 class PropTextEditor(QObject):
-    sigUpdate = pyqtSignal()
-    sigDone = pyqtSignal()
+    sigUpdate = Signal()
+    sigDone = Signal()
 
     def __init__(self, ctrl, obj):
         super().__init__()
@@ -214,19 +215,19 @@ class PropTextEditor(QObject):
         painter.setBrush(Qt.NoBrush)
         self._handle.draw(painter)
 
-    @pyqtSlot('QPoint')
+    @Slot('QPoint')
     def _drag(self, pos):
         self._obj.setPosGlobal(pos)
         self.sigUpdate.emit()
 
-    @pyqtSlot()
+    @Slot()
     def _commit(self):
         self._obj.setPosGlobal(self._handle.pos)
         self._ctrl.doc.doCommand(self._cmd)
         self._cmd = sch.document.ObjChangeCmd(self._obj)
         self.sigUpdate.emit()
 
-    @pyqtSlot()
+    @Slot()
     def _docChanged(self):
         # if document changed, it might be because the object got deleted; update state
         # check that object is still part of the document
@@ -238,7 +239,7 @@ class PropTextEditor(QObject):
 
 
 class PropTextInspector(QWidget):
-    edited = pyqtSignal()
+    edited = Signal()
 
     def __init__(self, obj, parent=None):
         super().__init__(parent)
@@ -289,7 +290,7 @@ class PropTextInspector(QWidget):
         self.ui.fontFace.setCurrentText(obj.family)
         self.ui.fontSize.setCurrentText("{:g}".format(obj.ptSize/500))
 
-    @pyqtSlot(int)
+    @Slot(int)
     def on_alignGroup_buttonClicked(self, id):
         if self.ui.btnTopLeft.isChecked():
             align = Qt.AlignTop | Qt.AlignLeft
@@ -312,37 +313,37 @@ class PropTextInspector(QWidget):
         self.obj.alignment = align
         self.edited.emit()
 
-    @pyqtSlot(QFont)
+    @Slot(QFont)
     def on_fontFace_currentFontChanged(self, font):
         if self.obj:
             self.obj.family = font.family()
             self.edited.emit()
 
-    @pyqtSlot(str)
+    @Slot(str)
     def on_fontSize_editTextChanged(self, text):
         if self.obj:
             self.obj.ptSize = int(float(text)*500)
             self.edited.emit()
 
-    @pyqtSlot(str)
+    @Slot(str)
     def on_cbProp_currentTextChanged(self, text):
         if self.obj:
             self.obj.name = text
             self.edited.emit()
 
-    @pyqtSlot(str)
+    @Slot(str)
     def on_leValue_textEdited(self, text):
         if self.obj:
             self.obj.value = text
             self.edited.emit()
 
-    @pyqtSlot(bool)
+    @Slot(bool)
     def on_cbVis_toggled(self, chkd):
         if self.obj:
             self.obj.vis = chkd
             self.edited.emit()
 
-    @pyqtSlot(bool)
+    @Slot(bool)
     def on_cbShowName_toggled(self, chkd):
         if self.obj:
             self.obj.showName = chkd

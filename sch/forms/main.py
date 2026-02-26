@@ -1,6 +1,6 @@
-from PyQt5.QtCore import pyqtSignal, pyqtSlot, Qt, QSettings, QVariant, QByteArray
-from PyQt5 import QtWidgets
-from PyQt5.QtWidgets import QMainWindow, QDockWidget, QMessageBox, QFileDialog, QWidget, QVBoxLayout, QPushButton, QSpacerItem
+from PySide6.QtCore import Signal, Slot, Qt, QSettings, QByteArray
+from PySide6 import QtWidgets
+from PySide6.QtWidgets import QMainWindow, QDockWidget, QMessageBox, QFileDialog, QWidget, QVBoxLayout, QPushButton, QSpacerItem
 from sch.uic.ui_mainwindow import Ui_MainWindow
 from sch.uic.ui_toolsdock import Ui_ToolsDock
 from sch.view import SchView
@@ -10,14 +10,13 @@ from sch.forms.projectdock import ProjectDock
 from sch.forms.inspector import InspectorDock
 from sch.library import PartLibrary
 from functools import partial
-import sip
 import traceback
 
 
 class MainWindow(QMainWindow):
-    tabUndo = pyqtSignal()
-    tabRedo = pyqtSignal()
-    docsChanged = pyqtSignal()
+    tabUndo = Signal()
+    tabRedo = Signal()
+    docsChanged = Signal()
 
     def __init__(self):
         QMainWindow.__init__(self)
@@ -98,24 +97,24 @@ class MainWindow(QMainWindow):
                     return False
         return True
 
-    @pyqtSlot()
+    @Slot()
     def onInspectorChanged(self):
         if self.activeTab is not None:
             self.inspDock.setChild(self.activeTab.ctrl.inspector)
         else:
             self.inspDock.setChild(None)
 
-    @pyqtSlot('bool', 'bool')
+    @Slot('bool', 'bool')
     def onTabUndoChanged(self, enUndo, enRedo):
         self.ui.actionUndo.setEnabled(enUndo)
         self.ui.actionRedo.setEnabled(enRedo)
 
-    @pyqtSlot()
+    @Slot()
     def on_actionNew_triggered(self):
         self.docs.append(MasterDocument(self.lib))
         self.docsChanged.emit()
 
-    @pyqtSlot()
+    @Slot()
     def on_actionOpen_triggered(self):
         fn = QFileDialog.getOpenFileName(self)[0]
         if fn != "":
@@ -133,19 +132,19 @@ class MainWindow(QMainWindow):
                 self.ui.statusbar.showMessage("Error loading document: {}: {}".format(str(type(e)), str(e)), 5000)
                 traceback.print_exc()
 
-    @pyqtSlot()
+    @Slot()
     def on_actionUndo_triggered(self):
         self.currentTab().undo()
 
-    @pyqtSlot()
+    @Slot()
     def on_actionRedo_triggered(self):
         self.currentTab().redo()
 
-    @pyqtSlot()
+    @Slot()
     def on_actionSave_triggered(self):
         return self.saveDoc(self.currentDoc())
 
-    @pyqtSlot()
+    @Slot()
     def on_actionSave_As_triggered(self):
         return self.saveAsDoc(self.currentDoc())
 
@@ -176,7 +175,7 @@ class MainWindow(QMainWindow):
         self.activeTab = None
         self.onInspectorChanged()
 
-    @pyqtSlot('PyQt_PyObject')
+    @Slot(object)
     def on_pageOpen(self, page):
         for i in range(self.ui.tabWidget.count()):
             t = self.ui.tabWidget.widget(i)
@@ -190,14 +189,14 @@ class MainWindow(QMainWindow):
         self.ui.tabWidget.addTab(tab, page.name)
         self.ui.tabWidget.setCurrentIndex(self.ui.tabWidget.indexOf(tab))
 
-    @pyqtSlot(int)
+    @Slot(int)
     def on_tabWidget_currentChanged(self, idx):
         tab = None
         if idx >= 0:
             tab = self.ui.tabWidget.widget(idx)
         self.installTab(tab)
 
-    @pyqtSlot(int)
+    @Slot(int)
     def on_tabWidget_tabCloseRequested(self, idx):
         if self.ui.tabWidget.currentIndex() == idx:
             self.disconnectActiveTab()
@@ -206,7 +205,7 @@ class MainWindow(QMainWindow):
 
 class PageTab(QWidget):
     # args: can undo / can redo
-    undoChanged = pyqtSignal(bool, bool)
+    undoChanged = Signal(bool, bool)
 
     def __init__(self, doc: AbstractPage, parent=None, lib=None):
         super().__init__(parent)
@@ -220,7 +219,7 @@ class PageTab(QWidget):
         layout.addWidget(self.view)
         self.setLayout(layout)
 
-    @pyqtSlot(bool)
+    @Slot(bool)
     def _onUndoChanged(self):
         self.undoChanged.emit(self.canUndo(), self.canRedo())
 
@@ -238,7 +237,7 @@ class PageTab(QWidget):
 
 
 class ToolsDock(QDockWidget):
-    toolChanged = pyqtSignal(int)
+    toolChanged = Signal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -252,11 +251,11 @@ class ToolsDock(QDockWidget):
         for w in self._widgets:
             self.ui.verticalLayout.removeWidget(w)
             w.setParent(None)
-            sip.delete(w)
+            # sip.delete(w) - Not needed in PySide6
         self._widgets.clear()
         if self._spacer:
             self.ui.verticalLayout.removeItem(self._spacer)
-            sip.delete(self._spacer)
+            # sip.delete(self._spacer) - Not needed in PySide6
             self._spacer = None
 
     def initTools(self, tools):
@@ -282,7 +281,7 @@ class ToolsDock(QDockWidget):
         self._spacer = spacerItem
         #self._widgets.append(spacerItem)
 
-    @pyqtSlot(int)
+    @Slot(int)
     def on_toolChanged(self, idx):
         # print("tool changed: {}".format(tool))
         self.blockSignals(True)

@@ -1,6 +1,7 @@
 from enum import Enum
-from PyQt5.QtCore import *
-from PyQt5.QtGui import QPainter, QPen
+from PySide6.QtCore import Signal, Slot, Qt, QObject, QPoint
+from PySide6.QtGui import QPainter, QPen, QUndoStack, QUndoCommand
+from PySide6.QtCore import Signal, Slot
 from sch.obj.line import LineTool, LineObj, LineEditor
 import sch.obj.net
 import sch.obj.text
@@ -30,9 +31,9 @@ def getCtrl(doc):
 
 
 class Controller(QObject):
-    sigUpdate = pyqtSignal()
-    sigToolChanged = pyqtSignal(int)
-    sigInspectorChanged = pyqtSignal()
+    sigUpdate = Signal()
+    sigToolChanged = Signal(int)
+    sigInspectorChanged = Signal()
 
     def __init__(self, doc=None, view=None, lib=None):
         super().__init__()
@@ -132,7 +133,7 @@ class Controller(QObject):
             out.append(self._tool)
         return out
 
-    @pyqtSlot(int)
+    @Slot(int)
     def changeTool(self, tool_id):
         if self._toolId == tool_id:
             return
@@ -164,7 +165,7 @@ class SymController(Controller):
 
 
 class SelectTool(QObject):
-    sigUpdate = pyqtSignal()
+    sigUpdate = Signal()
 
     def __init__(self, ctrl):
         QObject.__init__(self)
@@ -225,7 +226,7 @@ class SelectTool(QObject):
                     self.sigUpdate.emit()
             self.selectionChanged(event)
 
-    @pyqtSlot()
+    @Slot()
     def releaseSelection(self):
         self._selection.clear()
         self.selectionChanged()
@@ -259,8 +260,8 @@ class SelectTool(QObject):
 
 # TODO: property inspector / editor
 class EditHandle(QObject):
-    sigDragged = pyqtSignal('QPoint')
-    sigMoved = pyqtSignal('QPoint')
+    sigDragged = Signal('QPoint')
+    sigMoved = Signal('QPoint')
 
     def __init__(self, ctrl, pos=QPoint()):
         super().__init__()

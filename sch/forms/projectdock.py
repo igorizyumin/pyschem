@@ -1,12 +1,13 @@
-from PyQt5.QtCore import pyqtSignal, pyqtSlot, Qt, QObject, QModelIndex, QPoint
-from PyQt5.QtWidgets import QDockWidget, QMenu, QAction
+from PySide6.QtCore import Signal, Slot, Qt, QObject, QModelIndex, QPoint
+from PySide6.QtGui import QAction
+from PySide6.QtWidgets import QDockWidget, QMenu
 from sch.uic.ui_projectdock import Ui_ProjectDock
 from sch.document import MasterDocument
 from sch.forms.treeutils import AbstractTreeNode, AbstractTreeModel
 
 
 class ProjectDock(QDockWidget):
-    openPage = pyqtSignal('PyQt_PyObject')
+    openPage = Signal(object)
 
     class PageElement(object):
         def __init__(self, page):
@@ -45,7 +46,7 @@ class ProjectDock(QDockWidget):
         def page(self):
             return None
 
-        @pyqtSlot()
+        @Slot()
         def onDocChanged(self):
             self.name = self._doc.name()
             self.subelements = []
@@ -94,18 +95,18 @@ class ProjectDock(QDockWidget):
         self.ui.projectTree.customContextMenuRequested.connect(self.onContextMenu)
         self.onDocsChanged()
 
-    @pyqtSlot()
+    @Slot()
     def onDocsChanged(self):
         self.ui.projectTree.setModel(ProjectDock.Model([ProjectDock.DocElement(d) for d in self.window.docs]))
         self.ui.projectTree.expandAll()
 
-    @pyqtSlot(QModelIndex)
+    @Slot(QModelIndex)
     def on_projectTree_doubleClicked(self, idx: QModelIndex):
         p = idx.data(Qt.UserRole).page
         if p is not None:
             self.openPage.emit(p)
 
-    @pyqtSlot(QPoint)
+    @Slot(QPoint)
     def onContextMenu(self, pt: QPoint):
         index = self.ui.projectTree.indexAt(pt)
         newDocAction = QAction("New document", None)

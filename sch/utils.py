@@ -1,6 +1,6 @@
 from enum import Enum
-from PyQt5.QtCore import QPoint
-from PyQt5.QtGui import QColor
+from PySide6.QtCore import QPoint
+from PySide6.QtGui import QColor
 
 
 # hashable version of QPoint

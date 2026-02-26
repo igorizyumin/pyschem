@@ -1,6 +1,6 @@
-from PyQt5.QtCore import *
-from PyQt5.QtGui import QTransform, QPainter, QPen, QBrush, QCursor, QPolygon, QKeyEvent
-from PyQt5.QtWidgets import *
+from PySide6.QtCore import *
+from PySide6.QtGui import QTransform, QPainter, QPen, QBrush, QCursor, QPolygon, QKeyEvent
+from PySide6.QtWidgets import *
 from sch.utils import Coord, Layer, LayerType
 from itertools import product
 from enum import Enum
@@ -163,6 +163,6 @@ class SchView(QWidget):
     def leaveEvent(self, e):
         self.clearFocus()
 
-    @pyqtSlot()
+    @Slot()
     def slotUpdate(self):
         self.update()

@@ -1,5 +1,6 @@
-from PyQt5.QtCore import *
-from PyQt5.QtGui import QPainter, QPen
+from PySide6.QtCore import *
+from PySide6.QtGui import QPainter, QPen
+from PySide6.QtCore import Signal, Slot
 import sch.document
 import sch.controller
 from sch.utils import LayerType, Layer, Geom
@@ -43,7 +44,7 @@ class LineObj(object):
 
 
 class LineTool(QObject):
-    sigUpdate = pyqtSignal()
+    sigUpdate = Signal()
 
     def __init__(self, ctrl):
         QObject.__init__(self)
@@ -93,8 +94,8 @@ class LineTool(QObject):
 
 
 class LineEditor(QObject):
-    sigUpdate = pyqtSignal()
-    sigDone = pyqtSignal()
+    sigUpdate = Signal()
+    sigDone = Signal()
 
     def __init__(self, ctrl, obj):
         super().__init__()
@@ -135,17 +136,17 @@ class LineEditor(QObject):
     def inspector(self):
         return None
 
-    @pyqtSlot('QPoint')
+    @Slot('QPoint')
     def _dragPt1(self, pos):
         self._obj.pt1 = pos
         self.sigUpdate.emit()
 
-    @pyqtSlot('QPoint')
+    @Slot('QPoint')
     def _dragPt2(self, pos):
         self._obj.pt2 = pos
         self.sigUpdate.emit()
 
-    @pyqtSlot('QPoint')
+    @Slot('QPoint')
     def _commit(self):
         self._obj.pt1 = self._handles[0].pos
         self._obj.pt2 = self._handles[1].pos
@@ -153,7 +154,7 @@ class LineEditor(QObject):
         self._cmd = sch.document.ObjChangeCmd(self._obj)
         self.sigUpdate.emit()
 
-    @pyqtSlot()
+    @Slot()
     def _docChanged(self):
         # if document changed, it might be because the object got deleted; update state
         # check that object is still part of the document

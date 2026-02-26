@@ -1,6 +1,7 @@
-from PyQt5.QtCore import *
-from PyQt5.QtGui import *
-from PyQt5.QtWidgets import QUndoCommand, QWidget
+from PySide6.QtCore import *
+from PySide6.QtGui import *
+from PySide6.QtWidgets import QWidget
+from PySide6.QtCore import Signal, Slot
 from enum import Enum
 from lxml import etree
 from sch.utils import *
@@ -188,7 +189,7 @@ class TextObj(TextBase):
 
 
 class TextTool(QObject):
-    sigUpdate = pyqtSignal()
+    sigUpdate = Signal()
 
     def __init__(self, ctrl):
         QObject.__init__(self)
@@ -229,8 +230,8 @@ class TextTool(QObject):
 
 
 class TextEditor(QObject):
-    sigUpdate = pyqtSignal()
-    sigDone = pyqtSignal()
+    sigUpdate = Signal()
+    sigDone = Signal()
 
     def __init__(self, ctrl, obj):
         super().__init__()
@@ -269,19 +270,19 @@ class TextEditor(QObject):
         painter.setBrush(Qt.NoBrush)
         self._handle.draw(painter)
 
-    @pyqtSlot('QPoint')
+    @Slot('QPoint')
     def _drag(self, pos):
         self._obj.pos = pos
         self.sigUpdate.emit()
 
-    @pyqtSlot()
+    @Slot()
     def _commit(self):
         self._obj.pos = self._handle.pos
         self._ctrl.doc.doCommand(self._cmd)
         self._cmd = sch.document.ObjChangeCmd(self._obj)
         self.sigUpdate.emit()
 
-    @pyqtSlot()
+    @Slot()
     def _docChanged(self):
         # if document changed, it might be because the object got deleted; update state
         # check that object is still part of the document
@@ -293,7 +294,7 @@ class TextEditor(QObject):
 
 
 class TextInspector(QWidget):
-    edited = pyqtSignal()
+    edited = Signal()
 
     def __init__(self, obj, parent=None):
         super().__init__(parent)
@@ -341,7 +342,7 @@ class TextInspector(QWidget):
         self.ui.fontFace.setCurrentText(obj.family)
         self.ui.fontSize.setCurrentText("{:g}".format(obj.ptSize/500))
 
-    @pyqtSlot(int)
+    @Slot(int)
     def on_alignGroup_buttonClicked(self, id):
         if self.ui.btnTopLeft.isChecked():
             align = Qt.AlignTop | Qt.AlignLeft
@@ -364,19 +365,19 @@ class TextInspector(QWidget):
         self.obj.alignment = align
         self.edited.emit()
 
-    @pyqtSlot(str)
+    @Slot(str)
     def on_text_textEdited(self, text):
         if self.obj:
             self.obj.text = text
             self.edited.emit()
 
-    @pyqtSlot(QFont)
+    @Slot(QFont)
     def on_fontFace_currentFontChanged(self, font):
         if self.obj:
             self.obj.family = font.family()
             self.edited.emit()
 
-    @pyqtSlot(str)
+    @Slot(str)
     def on_fontSize_editTextChanged(self, text):
         if self.obj:
             self.obj.ptSize = int(float(text)*500)

@@ -1,7 +1,8 @@
 import copy
 from uuid import UUID, uuid4
-from PyQt5.QtCore import *
-from PyQt5.QtWidgets import QUndoStack, QUndoCommand
+from PySide6.QtCore import *
+from PySide6.QtGui import QUndoStack, QUndoCommand
+from PySide6.QtWidgets import *
 from lxml import etree
 import sch.obj.line
 import sch.obj.net
@@ -12,8 +13,8 @@ import sch.obj.proptext
 
 class MasterDocument(QObject):
     # indicates document structure has changed (NOT sub-documents; those have their own signals)
-    sigChanged = pyqtSignal()
-    sigCleanChanged = pyqtSignal()
+    sigChanged = Signal()
+    sigCleanChanged = Signal()
 
     def __init__(self, lib):
         QObject.__init__(self)
@@ -130,7 +131,7 @@ class MasterDocument(QObject):
 
 
 class AbstractPage(QObject):
-    sigChanged = pyqtSignal()
+    sigChanged = Signal()
 
     def __init__(self, parent: MasterDocument):
         super().__init__()
@@ -188,12 +189,12 @@ class AbstractPage(QObject):
         self._objs.remove(obj)
         self.sigChanged.emit()
 
-    @pyqtSlot()
+    @Slot()
     def undo(self):
         self.undoStack.undo()
         self.sigChanged.emit()
 
-    @pyqtSlot()
+    @Slot()
     def redo(self):
         self.undoStack.redo()
         self.sigChanged.emit()

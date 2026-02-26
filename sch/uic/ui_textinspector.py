@@ -1,144 +1,195 @@
 # -*- coding: utf-8 -*-
 
-# Form implementation generated from reading ui file 'ui/TextInspector.ui'
-#
-# Created: Sat Feb 20 19:51:52 2016
-#      by: PyQt5 UI code generator 5.2.1
-#
-# WARNING! All changes made in this file will be lost!
+################################################################################
+## Form generated from reading UI file 'TextInspector.ui'
+##
+## Created by: Qt User Interface Compiler version 6.10.2
+##
+## WARNING! All changes made in this file will be lost when recompiling UI file!
+################################################################################
 
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PySide6.QtCore import (QCoreApplication, QDate, QDateTime, QLocale,
+    QMetaObject, QObject, QPoint, QRect,
+    QSize, QTime, QUrl, Qt)
+from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
+    QFont, QFontDatabase, QGradient, QIcon,
+    QImage, QKeySequence, QLinearGradient, QPainter,
+    QPalette, QPixmap, QRadialGradient, QTransform)
+from PySide6.QtWidgets import (QApplication, QButtonGroup, QComboBox, QFontComboBox,
+    QGridLayout, QHBoxLayout, QLabel, QLineEdit,
+    QPushButton, QSizePolicy, QSpacerItem, QVBoxLayout,
+    QWidget)
 
 class Ui_TextInspector(object):
     def setupUi(self, TextInspector):
-        TextInspector.setObjectName("TextInspector")
+        if not TextInspector.objectName():
+            TextInspector.setObjectName(u"TextInspector")
         TextInspector.resize(221, 252)
-        self.verticalLayout = QtWidgets.QVBoxLayout(TextInspector)
-        self.verticalLayout.setObjectName("verticalLayout")
-        self.horizontalLayout = QtWidgets.QHBoxLayout()
-        self.horizontalLayout.setObjectName("horizontalLayout")
-        self.label = QtWidgets.QLabel(TextInspector)
-        self.label.setObjectName("label")
+        self.verticalLayout = QVBoxLayout(TextInspector)
+        self.verticalLayout.setObjectName(u"verticalLayout")
+        self.horizontalLayout = QHBoxLayout()
+        self.horizontalLayout.setObjectName(u"horizontalLayout")
+        self.label = QLabel(TextInspector)
+        self.label.setObjectName(u"label")
+
         self.horizontalLayout.addWidget(self.label)
-        self.text = QtWidgets.QLineEdit(TextInspector)
-        self.text.setObjectName("text")
+
+        self.text = QLineEdit(TextInspector)
+        self.text.setObjectName(u"text")
+
         self.horizontalLayout.addWidget(self.text)
+
+
         self.verticalLayout.addLayout(self.horizontalLayout)
-        self.horizontalLayout_3 = QtWidgets.QHBoxLayout()
-        self.horizontalLayout_3.setObjectName("horizontalLayout_3")
-        self.fontFace = QtWidgets.QFontComboBox(TextInspector)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+
+        self.horizontalLayout_3 = QHBoxLayout()
+        self.horizontalLayout_3.setObjectName(u"horizontalLayout_3")
+        self.fontFace = QFontComboBox(TextInspector)
+        self.fontFace.setObjectName(u"fontFace")
+        sizePolicy = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.fontFace.sizePolicy().hasHeightForWidth())
         self.fontFace.setSizePolicy(sizePolicy)
-        self.fontFace.setMinimumSize(QtCore.QSize(100, 0))
+        self.fontFace.setMinimumSize(QSize(100, 0))
         self.fontFace.setMaxVisibleItems(99)
-        self.fontFace.setObjectName("fontFace")
+
         self.horizontalLayout_3.addWidget(self.fontFace)
-        self.fontSize = QtWidgets.QComboBox(TextInspector)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
+
+        self.fontSize = QComboBox(TextInspector)
+        self.fontSize.setObjectName(u"fontSize")
         sizePolicy.setHeightForWidth(self.fontSize.sizePolicy().hasHeightForWidth())
         self.fontSize.setSizePolicy(sizePolicy)
         self.fontSize.setEditable(True)
-        self.fontSize.setObjectName("fontSize")
+
         self.horizontalLayout_3.addWidget(self.fontSize)
+
+
         self.verticalLayout.addLayout(self.horizontalLayout_3)
-        self.horizontalLayout_2 = QtWidgets.QHBoxLayout()
-        self.horizontalLayout_2.setObjectName("horizontalLayout_2")
-        self.label_2 = QtWidgets.QLabel(TextInspector)
-        self.label_2.setObjectName("label_2")
+
+        self.horizontalLayout_2 = QHBoxLayout()
+        self.horizontalLayout_2.setObjectName(u"horizontalLayout_2")
+        self.label_2 = QLabel(TextInspector)
+        self.label_2.setObjectName(u"label_2")
+
         self.horizontalLayout_2.addWidget(self.label_2)
-        spacerItem = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
-        self.horizontalLayout_2.addItem(spacerItem)
-        self.gridLayout = QtWidgets.QGridLayout()
+
+        self.horizontalSpacer = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+
+        self.horizontalLayout_2.addItem(self.horizontalSpacer)
+
+        self.gridLayout = QGridLayout()
         self.gridLayout.setSpacing(4)
-        self.gridLayout.setObjectName("gridLayout")
-        self.btnMidCtr = QtWidgets.QPushButton(TextInspector)
-        self.btnMidCtr.setMaximumSize(QtCore.QSize(15, 15))
-        self.btnMidCtr.setText("")
+        self.gridLayout.setObjectName(u"gridLayout")
+        self.btnMidCtr = QPushButton(TextInspector)
+        self.alignGroup = QButtonGroup(TextInspector)
+        self.alignGroup.setObjectName(u"alignGroup")
+        self.alignGroup.addButton(self.btnMidCtr)
+        self.btnMidCtr.setObjectName(u"btnMidCtr")
+        self.btnMidCtr.setMaximumSize(QSize(15, 15))
         self.btnMidCtr.setCheckable(True)
         self.btnMidCtr.setChecked(True)
-        self.btnMidCtr.setObjectName("btnMidCtr")
-        self.alignGroup = QtWidgets.QButtonGroup(TextInspector)
-        self.alignGroup.setObjectName("alignGroup")
-        self.alignGroup.addButton(self.btnMidCtr)
+
         self.gridLayout.addWidget(self.btnMidCtr, 2, 3, 1, 1)
-        self.btnMidLeft = QtWidgets.QPushButton(TextInspector)
-        self.btnMidLeft.setMaximumSize(QtCore.QSize(15, 15))
-        self.btnMidLeft.setText("")
-        self.btnMidLeft.setCheckable(True)
-        self.btnMidLeft.setObjectName("btnMidLeft")
+
+        self.btnMidLeft = QPushButton(TextInspector)
         self.alignGroup.addButton(self.btnMidLeft)
+        self.btnMidLeft.setObjectName(u"btnMidLeft")
+        self.btnMidLeft.setMaximumSize(QSize(15, 15))
+        self.btnMidLeft.setCheckable(True)
+
         self.gridLayout.addWidget(self.btnMidLeft, 2, 2, 1, 1)
-        self.btnTopLeft = QtWidgets.QPushButton(TextInspector)
-        self.btnTopLeft.setEnabled(True)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.btnTopLeft.sizePolicy().hasHeightForWidth())
-        self.btnTopLeft.setSizePolicy(sizePolicy)
-        self.btnTopLeft.setMaximumSize(QtCore.QSize(15, 15))
-        self.btnTopLeft.setText("")
-        self.btnTopLeft.setCheckable(True)
-        self.btnTopLeft.setObjectName("btnTopLeft")
+
+        self.btnTopLeft = QPushButton(TextInspector)
         self.alignGroup.addButton(self.btnTopLeft)
+        self.btnTopLeft.setObjectName(u"btnTopLeft")
+        self.btnTopLeft.setEnabled(True)
+        sizePolicy1 = QSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        sizePolicy1.setHorizontalStretch(0)
+        sizePolicy1.setVerticalStretch(0)
+        sizePolicy1.setHeightForWidth(self.btnTopLeft.sizePolicy().hasHeightForWidth())
+        self.btnTopLeft.setSizePolicy(sizePolicy1)
+        self.btnTopLeft.setMaximumSize(QSize(15, 15))
+        self.btnTopLeft.setCheckable(True)
+
         self.gridLayout.addWidget(self.btnTopLeft, 1, 2, 1, 1)
-        self.btnTopRight = QtWidgets.QPushButton(TextInspector)
-        self.btnTopRight.setMaximumSize(QtCore.QSize(15, 15))
-        self.btnTopRight.setText("")
-        self.btnTopRight.setCheckable(True)
-        self.btnTopRight.setObjectName("btnTopRight")
+
+        self.btnTopRight = QPushButton(TextInspector)
         self.alignGroup.addButton(self.btnTopRight)
+        self.btnTopRight.setObjectName(u"btnTopRight")
+        self.btnTopRight.setMaximumSize(QSize(15, 15))
+        self.btnTopRight.setCheckable(True)
+
         self.gridLayout.addWidget(self.btnTopRight, 1, 4, 1, 1)
-        self.btnTopCtr = QtWidgets.QPushButton(TextInspector)
-        self.btnTopCtr.setMaximumSize(QtCore.QSize(15, 15))
-        self.btnTopCtr.setText("")
-        self.btnTopCtr.setCheckable(True)
-        self.btnTopCtr.setObjectName("btnTopCtr")
+
+        self.btnTopCtr = QPushButton(TextInspector)
         self.alignGroup.addButton(self.btnTopCtr)
+        self.btnTopCtr.setObjectName(u"btnTopCtr")
+        self.btnTopCtr.setMaximumSize(QSize(15, 15))
+        self.btnTopCtr.setCheckable(True)
+
         self.gridLayout.addWidget(self.btnTopCtr, 1, 3, 1, 1)
-        self.btnBotCtr = QtWidgets.QPushButton(TextInspector)
-        self.btnBotCtr.setMaximumSize(QtCore.QSize(15, 15))
-        self.btnBotCtr.setText("")
-        self.btnBotCtr.setCheckable(True)
-        self.btnBotCtr.setObjectName("btnBotCtr")
+
+        self.btnBotCtr = QPushButton(TextInspector)
         self.alignGroup.addButton(self.btnBotCtr)
+        self.btnBotCtr.setObjectName(u"btnBotCtr")
+        self.btnBotCtr.setMaximumSize(QSize(15, 15))
+        self.btnBotCtr.setCheckable(True)
+
         self.gridLayout.addWidget(self.btnBotCtr, 3, 3, 1, 1)
-        self.btnMidRight = QtWidgets.QPushButton(TextInspector)
-        self.btnMidRight.setMaximumSize(QtCore.QSize(15, 15))
-        self.btnMidRight.setText("")
-        self.btnMidRight.setCheckable(True)
-        self.btnMidRight.setObjectName("btnMidRight")
+
+        self.btnMidRight = QPushButton(TextInspector)
         self.alignGroup.addButton(self.btnMidRight)
+        self.btnMidRight.setObjectName(u"btnMidRight")
+        self.btnMidRight.setMaximumSize(QSize(15, 15))
+        self.btnMidRight.setCheckable(True)
+
         self.gridLayout.addWidget(self.btnMidRight, 2, 4, 1, 1)
-        self.btnBotLeft = QtWidgets.QPushButton(TextInspector)
-        self.btnBotLeft.setMaximumSize(QtCore.QSize(15, 15))
-        self.btnBotLeft.setText("")
-        self.btnBotLeft.setCheckable(True)
-        self.btnBotLeft.setObjectName("btnBotLeft")
+
+        self.btnBotLeft = QPushButton(TextInspector)
         self.alignGroup.addButton(self.btnBotLeft)
+        self.btnBotLeft.setObjectName(u"btnBotLeft")
+        self.btnBotLeft.setMaximumSize(QSize(15, 15))
+        self.btnBotLeft.setCheckable(True)
+
         self.gridLayout.addWidget(self.btnBotLeft, 3, 2, 1, 1)
-        self.btnBotRight = QtWidgets.QPushButton(TextInspector)
-        self.btnBotRight.setMaximumSize(QtCore.QSize(15, 15))
-        self.btnBotRight.setText("")
-        self.btnBotRight.setCheckable(True)
-        self.btnBotRight.setObjectName("btnBotRight")
+
+        self.btnBotRight = QPushButton(TextInspector)
         self.alignGroup.addButton(self.btnBotRight)
+        self.btnBotRight.setObjectName(u"btnBotRight")
+        self.btnBotRight.setMaximumSize(QSize(15, 15))
+        self.btnBotRight.setCheckable(True)
+
         self.gridLayout.addWidget(self.btnBotRight, 3, 4, 1, 1)
+
+
         self.horizontalLayout_2.addLayout(self.gridLayout)
+
+
         self.verticalLayout.addLayout(self.horizontalLayout_2)
-        spacerItem1 = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
-        self.verticalLayout.addItem(spacerItem1)
+
+        self.verticalSpacer = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+
+        self.verticalLayout.addItem(self.verticalSpacer)
+
 
         self.retranslateUi(TextInspector)
-        QtCore.QMetaObject.connectSlotsByName(TextInspector)
+
+        QMetaObject.connectSlotsByName(TextInspector)
+    # setupUi
 
     def retranslateUi(self, TextInspector):
-        _translate = QtCore.QCoreApplication.translate
-        TextInspector.setWindowTitle(_translate("TextInspector", "Form"))
-        self.label.setText(_translate("TextInspector", "Text"))
-        self.label_2.setText(_translate("TextInspector", "Alignment"))
+        TextInspector.setWindowTitle(QCoreApplication.translate("TextInspector", u"Form", None))
+        self.label.setText(QCoreApplication.translate("TextInspector", u"Text", None))
+        self.label_2.setText(QCoreApplication.translate("TextInspector", u"Alignment", None))
+        self.btnMidCtr.setText("")
+        self.btnMidLeft.setText("")
+        self.btnTopLeft.setText("")
+        self.btnTopRight.setText("")
+        self.btnTopCtr.setText("")
+        self.btnBotCtr.setText("")
+        self.btnMidRight.setText("")
+        self.btnBotLeft.setText("")
+        self.btnBotRight.setText("")
+    # retranslateUi
 

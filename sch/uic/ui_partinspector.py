@@ -1,33 +1,53 @@
 # -*- coding: utf-8 -*-
 
-# Form implementation generated from reading ui file './ui/PartInspector.ui'
-#
-# Created by: PyQt5 UI code generator 5.5.1
-#
-# WARNING! All changes made in this file will be lost!
+################################################################################
+## Form generated from reading UI file 'PartInspector.ui'
+##
+## Created by: Qt User Interface Compiler version 6.10.2
+##
+## WARNING! All changes made in this file will be lost when recompiling UI file!
+################################################################################
 
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PySide6.QtCore import (QCoreApplication, QDate, QDateTime, QLocale,
+    QMetaObject, QObject, QPoint, QRect,
+    QSize, QTime, QUrl, Qt)
+from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
+    QFont, QFontDatabase, QGradient, QIcon,
+    QImage, QKeySequence, QLinearGradient, QPainter,
+    QPalette, QPixmap, QRadialGradient, QTransform)
+from PySide6.QtWidgets import (QApplication, QButtonGroup, QLabel, QListWidget,
+    QListWidgetItem, QSizePolicy, QSpacerItem, QVBoxLayout,
+    QWidget)
 
 class Ui_PartInspector(object):
     def setupUi(self, PartInspector):
-        PartInspector.setObjectName("PartInspector")
+        if not PartInspector.objectName():
+            PartInspector.setObjectName(u"PartInspector")
         PartInspector.resize(221, 252)
-        self.verticalLayout = QtWidgets.QVBoxLayout(PartInspector)
-        self.verticalLayout.setObjectName("verticalLayout")
-        self.label_3 = QtWidgets.QLabel(PartInspector)
-        self.label_3.setObjectName("label_3")
+        self.verticalLayout = QVBoxLayout(PartInspector)
+        self.verticalLayout.setObjectName(u"verticalLayout")
+        self.label_3 = QLabel(PartInspector)
+        self.label_3.setObjectName(u"label_3")
+
         self.verticalLayout.addWidget(self.label_3)
-        self.masterList = QtWidgets.QListWidget(PartInspector)
-        self.masterList.setObjectName("masterList")
+
+        self.masterList = QListWidget(PartInspector)
+        self.masterList.setObjectName(u"masterList")
+
         self.verticalLayout.addWidget(self.masterList)
-        spacerItem = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
-        self.verticalLayout.addItem(spacerItem)
+
+        self.verticalSpacer = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+
+        self.verticalLayout.addItem(self.verticalSpacer)
+
 
         self.retranslateUi(PartInspector)
-        QtCore.QMetaObject.connectSlotsByName(PartInspector)
+
+        QMetaObject.connectSlotsByName(PartInspector)
+    # setupUi
 
     def retranslateUi(self, PartInspector):
-        _translate = QtCore.QCoreApplication.translate
-        PartInspector.setWindowTitle(_translate("PartInspector", "Form"))
-        self.label_3.setText(_translate("PartInspector", "Part master"))
+        PartInspector.setWindowTitle(QCoreApplication.translate("PartInspector", u"Form", None))
+        self.label_3.setText(QCoreApplication.translate("PartInspector", u"Part master", None))
+    # retranslateUi
 

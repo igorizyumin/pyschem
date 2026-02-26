@@ -1,6 +1,7 @@
-from PyQt5.QtCore import *
-from PyQt5.QtGui import QPainter, QPen, QTransform
-from PyQt5.QtWidgets import QWidget, QListWidgetItem
+from PySide6.QtCore import *
+from PySide6.QtGui import QPainter, QPen, QTransform
+from PySide6.QtWidgets import QWidget, QListWidgetItem
+from PySide6.QtCore import Signal, Slot
 import sch.document
 import sch.controller
 import sch.obj.proptext
@@ -181,7 +182,7 @@ class PartObj(object):
 
 
 class PartTool(QObject):
-    sigUpdate = pyqtSignal()
+    sigUpdate = Signal()
 
     def __init__(self, ctrl):
         QObject.__init__(self)
@@ -219,15 +220,15 @@ class PartTool(QObject):
             self._inspector.obj = self._obj
             e.handled = True
 
-    @pyqtSlot(str, str)
+    @Slot(str, str)
     def onMasterChanged(self, path, sym):
         self._obj.name = sym
         self._obj.path = path
 
 
 class PartInspector(QWidget):
-    edited = pyqtSignal()
-    masterChanged = pyqtSignal(str, str)
+    edited = Signal()
+    masterChanged = Signal(str, str)
 
     def __init__(self, ctrl, obj=None, parent=None):
         super().__init__(parent)
@@ -264,15 +265,15 @@ class PartInspector(QWidget):
                 self.ui.masterList.setCurrentRow(i)
                 break
 
-    @pyqtSlot(QListWidgetItem, QListWidgetItem)
+    @Slot(QListWidgetItem, QListWidgetItem)
     def on_masterList_currentItemChanged(self, curr, prev):
         d = curr.data(Qt.UserRole)
         self.masterChanged.emit(d[0], d[1])
 
 
 class PartEditor(QObject):
-    sigUpdate = pyqtSignal()
-    sigDone = pyqtSignal()
+    sigUpdate = Signal()
+    sigDone = Signal()
 
     def __init__(self, ctrl, obj):
         super().__init__()
@@ -335,19 +336,19 @@ class PartEditor(QObject):
     def inspector(self):
         return self._inspector
 
-    @pyqtSlot(str, str)
+    @Slot(str, str)
     def _masterChanged(self, path, name):
         self._obj.path = path
         self._obj.name = name
         self._commit()
 
-    @pyqtSlot()
+    @Slot()
     def _commit(self):
         self._ctrl.doc.doCommand(self._cmd)
         self._cmd = sch.document.ObjChangeCmd(self._obj)
         self.sigUpdate.emit()
 
-    @pyqtSlot()
+    @Slot()
     def _docChanged(self):
         # if document changed, it might be because the object got deleted; update state
         # check that object is still part of the document

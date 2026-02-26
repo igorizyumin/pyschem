@@ -1,5 +1,6 @@
-from PyQt5.QtCore import pyqtSignal, pyqtSlot, Qt, QObject, QModelIndex, QPoint
-from PyQt5.QtWidgets import QDockWidget, QMenu, QAction, QWidget
+from PySide6.QtCore import Signal, Slot, Qt, QObject, QModelIndex, QPoint
+from PySide6.QtGui import QAction
+from PySide6.QtWidgets import QDockWidget, QMenu, QWidget
 from sch.uic.ui_inspectordock import Ui_InspectorDock
 
 
@@ -10,7 +11,7 @@ class InspectorDock(QDockWidget):
         self.ui.setupUi(self)
         self._child = None
 
-    @pyqtSlot(QWidget)
+    @Slot(QWidget)
     def setChild(self, child):
         self._clearChild()
         if child is not None:
