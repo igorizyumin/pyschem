@@ -1,7 +1,6 @@
 from enum import Enum
-from PySide6.QtCore import Signal, Slot, Qt, QObject, QPoint
+from PySide6.QtCore import Signal, Slot, Qt, QObject, QPoint, QRect, QMargins
 from PySide6.QtGui import QPainter, QPen, QUndoStack, QUndoCommand
-from PySide6.QtCore import Signal, Slot
 from sch.obj.line import LineTool, LineObj, LineEditor
 import sch.obj.net
 import sch.obj.text

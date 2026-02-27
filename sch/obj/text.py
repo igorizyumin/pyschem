@@ -78,7 +78,8 @@ class TextBase(object):
         self._tr.translate(pos.x(), pos.y())
         self._tr.rotate(-((self.rot+rot) % 180))
         osx, osy = self._getOffset()
-        self._tr.translate(-self._fm.width(self._text)*osx, self._fm.height()*(osy-1))
+        bound = self._fm.boundingRect(self._text)
+        self._tr.translate(-bound.width()*osx, bound.height()*(osy-1))
         self._statictext = QStaticText(self._text)
         self._statictext.setTextOption(QTextOption(self.alignment))
         self._statictext.prepare(font=self._font, matrix=self._tr)
@@ -343,7 +344,7 @@ class TextInspector(QWidget):
         self.ui.fontSize.setCurrentText("{:g}".format(obj.ptSize/500))
 
     @Slot(int)
-    def on_alignGroup_buttonClicked(self, id):
+    def on_alignGroup_idClicked(self, id):
         if self.ui.btnTopLeft.isChecked():
             align = Qt.AlignTop | Qt.AlignLeft
         elif self.ui.btnTopCtr.isChecked():

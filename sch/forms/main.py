@@ -250,12 +250,14 @@ class ToolsDock(QDockWidget):
     def _clear(self):
         for w in self._widgets:
             self.ui.verticalLayout.removeWidget(w)
-            w.setParent(None)
+            w.close()
+            w.deleteLater()
             # sip.delete(w) - Not needed in PySide6
         self._widgets.clear()
         if self._spacer:
             self.ui.verticalLayout.removeItem(self._spacer)
             # sip.delete(self._spacer) - Not needed in PySide6
+            del self._spacer
             self._spacer = None
 
     def initTools(self, tools):

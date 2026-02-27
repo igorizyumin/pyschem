@@ -10,7 +10,6 @@ import sch.obj.text
 import sch.obj.part
 import sch.obj.proptext
 
-
 class MasterDocument(QObject):
     # indicates document structure has changed (NOT sub-documents; those have their own signals)
     sigChanged = Signal()
@@ -273,51 +272,56 @@ class SymbolPage(AbstractPage):
             obj.toXml(objs)
 
 
-class ObjAddCmd(QUndoCommand):
-    def __init__(self, obj, doc=None, parent=None):
-        super().__init__(parent)
+# This should not be necessary but PySide is a buggy POS and QUndoCommand fails to
+# take ownership of children, so they get deleted on the Python side and everything
+# breaks.
+class BaseUndoCmd(QUndoCommand):
+    def __init__(self, name='base command', parent=None, doc=None):
+        super().__init__(name, parent)
+        if parent is not None:
+            parent._children.append(self)
+        # Python's copy of the children so they do not get gc'ed.
         self._doc = doc
-        self._obj = obj
-        self.setText('add {}'.format(type(obj).__name__))
+        self._children = []
 
     @property
     def doc(self):
         return self._doc
-
+    
     @doc.setter
     def doc(self, doc):
         self._doc = doc
 
-    def redo(self):
-        self._doc.addObj(self._obj)
-
-    def undo(self):
-        self._doc.removeObj(self._obj)
-
-
-class ObjDelCmd(QUndoCommand):
+class ObjAddCmd(BaseUndoCmd):
     def __init__(self, obj, doc=None, parent=None):
-        super().__init__(parent)
-        self._doc = doc
+        print(parent)
+        super().__init__('add {}'.format(type(obj).__name__), parent=parent, doc=doc)
         self._obj = obj
-        self.setText('delete {}'.format(type(obj).__name__))
-
-    @property
-    def doc(self):
-        return self._doc
-
-    @doc.setter
-    def doc(self, doc):
-        self._doc = doc
 
     def redo(self):
-        self._doc.removeObj(self._obj)
+        print("redo add obj")
+        self.doc.addObj(self._obj)
 
     def undo(self):
-        self._doc.addObj(self._obj)
+        print("undo add obj")
+        self.doc.removeObj(self._obj)
 
 
-class ObjChangeCmd(QUndoCommand):
+class ObjDelCmd(BaseUndoCmd):
+    def __init__(self, obj, doc=None, parent=None):
+        print(parent)
+        super().__init__('delete {}'.format(type(obj).__name__), parent=parent, doc=doc)
+        self._obj = obj
+        
+    def redo(self):
+        print("redo del object")
+        self.doc.removeObj(self._obj)
+
+    def undo(self):
+        self.doc.addObj(self._obj)
+
+
+class ObjChangeCmd(BaseUndoCmd):
     @staticmethod
     def _Memento(obj, deep=False):
         state = (copy.copy, copy.deepcopy)[bool(deep)](obj.__dict__)
@@ -331,19 +335,10 @@ class ObjChangeCmd(QUndoCommand):
     # during the transaction.  The command should be submitted when the object
     # is in its final state.
     def __init__(self, obj, doc=None, parent=None):
-        super().__init__(parent)
-        self._doc = doc
+        super().__init__("change command", parent, doc=doc)
         self._obj = obj
         self._restore = ObjChangeCmd._Memento(obj)
         self._undone = False
-
-    @property
-    def doc(self):
-        return self._doc
-
-    @doc.setter
-    def doc(self, doc):
-        self._doc = doc
 
     def _restoreState(self):
         # swap memento with object state

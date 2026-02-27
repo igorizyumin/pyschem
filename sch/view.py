@@ -19,6 +19,7 @@ class Event(object):
 
     def __init__(self, evType, pos=None, key=None):
         super().__init__()
+        assert pos is None or type(pos) is QPoint
         self.evType = evType
         self.pos = pos
         self.key = key
@@ -75,8 +76,8 @@ class SchView(QWidget):
         startY = int(viewport.y() / g) * g
         endX = viewport.x() + viewport.width()
         endY = viewport.y() + viewport.height()
-        pts = QPolygon((QPoint(i[0], i[1]) for i in product(range(startX, endX, g),
-                                                            range(startY, endY, g))))
+        pts = QPolygon([QPoint(i[0], i[1]) for i in product(range(startX, endX, g),
+                                                            range(startY, endY, g))])
         painter.drawPoints(pts)
 
     def _drawOrigin(self, painter):
@@ -113,29 +114,29 @@ class SchView(QWidget):
         self.update()
 
     def mouseMoveEvent(self, e):
-        if e.buttons() & Qt.MidButton:
-            dl = QLine(QPoint(0, 0), e.pos() - self._mousePos)
+        if e.buttons() & Qt.MiddleButton:
+            dl = QLine(QPoint(0, 0), (e.position().toPoint() - self._mousePos))
             dl = self._transform.inverted()[0].map(dl)
             self._transform.translate(dl.dx(), dl.dy())
             self.update()
         self._handleEvent(Event(evType=Event.Type.MouseMoved,
-                                pos=self._transform.inverted()[0].map(e.pos())))
-        self._mousePos = e.pos()
+                                pos=self._transform.inverted()[0].map(e.position()).toPoint()))
+        self._mousePos = e.position()
 
     def mousePressEvent(self, e):
         if e.button() == Qt.LeftButton:
             self._handleEvent(Event(evType=Event.Type.MousePressed,
-                                    pos=self._transform.inverted()[0].map(e.pos())))
+                                    pos=self._transform.inverted()[0].map(e.position()).toPoint()))
 
     def mouseReleaseEvent(self, e):
         if e.button() == Qt.LeftButton:
             self._handleEvent(Event(evType=Event.Type.MouseReleased,
-                                    pos=self._transform.inverted()[0].map(e.pos())))
+                                    pos=self._transform.inverted()[0].map(e.position()).toPoint()))
 
     def mouseDoubleClickEvent(self, e):
         if e.button() == Qt.LeftButton:
             self._handleEvent(Event(evType=Event.Type.MouseDblClicked,
-                                    pos=self._transform.inverted()[0].map(e.pos())))
+                                    pos=self._transform.inverted()[0].map(e.position()).toPoint()))
 
     def hitRadius(self):
         return self._transform.inverted()[0].m11()*6     # 6 pixels
@@ -152,10 +153,10 @@ class SchView(QWidget):
         self._wheelAngle += e.angleDelta().y()
         if self._wheelAngle >= 120:
             self._wheelAngle -= 120
-            self.zoom(1.25, e.pos())
+            self.zoom(1.25, e.position())
         elif self._wheelAngle <= -120:
             self._wheelAngle += 120
-            self.zoom(0.8, e.pos())
+            self.zoom(0.8, e.position())
 
     def enterEvent(self, e):
         self.setFocus(Qt.MouseFocusReason)

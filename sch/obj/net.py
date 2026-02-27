@@ -1,7 +1,5 @@
-from PySide6.QtCore import *
-from PySide6.QtGui import QPainter, QPen, QBrush
-from PySide6.QtGui import QUndoCommand
-from PySide6.QtCore import Signal
+from PySide6.QtCore import QObject, Signal, Slot, QPoint, QPointF, Qt, QRect
+from PySide6.QtGui import QPainter, QPen, QBrush, QUndoCommand
 import sch.document
 import sch.controller
 from sch.utils import LayerType, Layer, Geom, Point
@@ -9,6 +7,7 @@ from sch.utils import LayerType, Layer, Geom, Point
 from lxml import etree
 from collections import defaultdict
 from sch.view import Event
+from shiboken6 import Shiboken
 
 
 class NetObj(object):
@@ -132,8 +131,9 @@ class NetTool(QObject):
             e.handled = True
 
     def addNet(self, newNet):
-        # print("new net ({},{})->({},{})".format(newNet.pt1.x(), newNet.pt1.y(), newNet.pt2.x(), newNet.pt2.y()))
+        print("new net ({},{})->({},{})".format(newNet.pt1.x(), newNet.pt1.y(), newNet.pt2.x(), newNet.pt2.y()))
         # this algorithm normalizes the nets such that nets touch only at endpoints
+        assert type(newNet.pt1) is QPoint and type(newNet.pt2) is QPoint
         origin = newNet.pt1
         newDir = newNet.pt2 - newNet.pt1
         unitNewDir = QPointF(newDir)
@@ -163,7 +163,7 @@ class NetTool(QObject):
                   if newNet.intersectsNet(net)}
         # collinear nets (which need to be replaced)
         clnets = {net for net in xsnets if Geom.isParallel(newDir, net.pt2-net.pt1)}
-        # print("collinear: " + str(clnets))
+        print("collinear: " + str(clnets))
         xsnets -= clnets    # remove collinear nets from set of intersections
         # compute union of all nets to be replaced
         # coordinates of united nets (projected onto newDir); initialize with new net coords
@@ -178,7 +178,9 @@ class NetTool(QObject):
         # find all intersection points
         minc = min(coords)
         maxc = max(coords)
-        unitedNet = NetObj((origin+minc*unitNewDir).toPoint(), (origin+maxc*unitNewDir).toPoint())
+        start_point = origin + (unitNewDir * minc).toPoint()
+        end_point = origin + (unitNewDir * maxc).toPoint()
+        unitedNet = NetObj(start_point, end_point)
         # these nets touch the new net with an endpoint
         xsP1 = {net for net in xsnets if unitedNet.touchesPt(net.pt1) and not unitedNet.connVtx(net)}
         xsP2 = {net for net in xsnets if unitedNet.touchesPt(net.pt2) and not unitedNet.connVtx(net)}
@@ -194,17 +196,18 @@ class NetTool(QObject):
         p1 = xscoords.pop(0)
         while xscoords:
             p2 = xscoords.pop(0)
-            netsAdd.add(NetObj((origin+p1*unitNewDir).toPoint(), (origin+p2*unitNewDir).toPoint()))
+            start_point = origin + (unitNewDir * p1).toPoint()
+            end_point = origin + (unitNewDir * p2).toPoint()
+            netsAdd.add(NetObj(start_point, end_point))
             p1 = p2
-        cmd = QUndoCommand()
+        cmd = sch.document.BaseUndoCmd("add net")
         for obj in netsDel:
-            # print("deleting {}".format(str(obj)))
+            print("deleting {}".format(str(obj)))
             sch.document.ObjDelCmd(obj, doc=self._ctrl.doc, parent=cmd)
         for obj in netsAdd:
-            # print("adding: {}".format(str(obj)))
+            print("adding: {}".format(str(obj)))
             sch.document.ObjAddCmd(obj, doc=self._ctrl.doc, parent=cmd)
         self._ctrl.doc.doCommand(cmd)
-
 
 class NetEditor(QObject):
     sigUpdate = Signal()
@@ -219,7 +222,7 @@ class NetEditor(QObject):
         #self._handles[0].sigDragged.connect(self._dragPt1)
         #self._handles[1].sigDragged.connect(self._dragPt2)
         self._ctrl.doc.sigChanged.connect(self._docChanged)
-        self._cmd = sch.document.ObjChangeCmd(obj)
+        self._cmd = sch.document.ObjChangeCmd(obj, self._ctrl.doc)
         #for h in self._handles:
         #    h.sigMoved.connect(self._commit)
 
