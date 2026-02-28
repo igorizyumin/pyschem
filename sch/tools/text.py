@@ -1,0 +1,185 @@
+from PySide6.QtCore import *
+from PySide6.QtGui import *
+from PySide6.QtWidgets import QWidget
+from PySide6.QtCore import Signal, Slot
+from sch.utils import *
+import sch.controller
+import sch.document
+from sch.view import Event
+from sch.uic.ui_textinspector import Ui_TextInspector
+import copy
+import sch.obj.text
+from sch.tools.base import TextHandle, BaseEditor
+
+
+class TextTool(QObject):
+    sigUpdate = Signal()
+
+    def __init__(self, ctrl):
+        QObject.__init__(self)
+        self._ctrl = ctrl
+        self._pos = QPoint()
+        self._obj = sch.obj.text.TextObj("Text")
+        self._inspector = TextInspector(self._obj)
+        # self._inspector.edited.connect(self._commit)
+
+    def finish(self):
+        self._obj = None
+        self.sigUpdate.emit()
+        pass
+
+    @property
+    def inspector(self):
+        return self._inspector
+
+    @staticmethod
+    def name():
+        return "Add Text"
+
+    def draw(self, painter):
+        if self._obj is not None:
+            self._obj.draw(painter)
+
+    def handleEvent(self, e):
+        if e.evType == sch.controller.Event.Type.MouseMoved:
+            self._obj.pos = self._ctrl.snapPt(e.pos)
+            self.sigUpdate.emit()
+            e.handled = True
+        elif e.evType == sch.controller.Event.Type.MouseReleased:
+            cmd = sch.document.ObjAddCmd(self._obj)
+            self._ctrl.doc.doCommand(cmd)
+            self._obj = copy.copy(self._obj)
+            self._inspector.obj = self._obj
+            e.handled = True
+
+
+class TextEditor(BaseEditor):
+
+    def __init__(self, ctrl, obj):
+        super().__init__(ctrl, obj)
+        self._inspector = TextInspector(obj)
+        self._inspector.edited.connect(self._commit)
+
+    def create_handles(self):
+        """Create a text handle for the text object."""
+        self._handles = [TextHandle(self._ctrl, self._obj)]
+
+    def _setup_handle_connections(self):
+        """Set up specific connections for text handle."""
+        self._handles[0].sigDragged.connect(self._drag)
+        self._handles[0].sigMoved.connect(self._commit)
+
+    def update_handles(self):
+        """Update handle position to match text position."""
+        self._handles[0].pos = self._obj.pos
+
+    def handle_custom_event(self, event):
+        """Handle keyboard events for rotation."""
+        super().handle_custom_event(event)
+        if event.handled:
+            return
+        if event.evType == Event.Type.KeyPressed:
+            if event.key == Qt.Key_R:
+                self._obj.rot = (self._obj.rot + 90) % 360
+                self._commit()
+
+    @Slot('QPoint')
+    def _drag(self, pos):
+        self._obj.pos = pos
+        self.sigUpdate.emit()
+
+    @Slot()
+    def _commit(self):
+        self._obj.pos = self._handles[0].pos
+        super()._commit()
+
+
+class TextInspector(QWidget):
+    edited = Signal()
+
+    def __init__(self, obj, parent=None):
+        super().__init__(parent)
+        self.ui = Ui_TextInspector()
+        self.ui.setupUi(self)
+        self._obj = None
+        fontSizes = list(range(6, 16)) + list(range(16, 34, 2)) + list(range(36, 48, 4)) + \
+            list(range(48, 66, 6)) + list(range(66, 98, 8))
+        self.ui.fontSize.addItems([str(i) for i in fontSizes])
+        self._obj = obj
+        self._loadProperties(obj)
+
+    @property
+    def obj(self):
+        return self._obj
+
+    @obj.setter
+    def obj(self, new):
+        self._obj = new
+        self._loadProperties(new)
+
+    def _loadProperties(self, obj: sch.obj.text.TextObj):
+        self.ui.text.setText(obj.text)
+        if obj.alignment & Qt.AlignLeft:
+            if obj.alignment & Qt.AlignTop:
+                self.ui.btnTopLeft.setChecked(True)
+            elif obj.alignment & Qt.AlignBottom:
+                self.ui.btnBotLeft.setChecked(True)
+            else:
+                self.ui.btnMidLeft.setChecked(True)
+        elif obj.alignment & Qt.AlignRight:
+            if obj.alignment & Qt.AlignTop:
+                self.ui.btnTopRight.setChecked(True)
+            elif obj.alignment & Qt.AlignBottom:
+                self.ui.btnBotRight.setChecked(True)
+            else:
+                self.ui.btnMidRight.setChecked(True)
+        else:
+            if obj.alignment & Qt.AlignTop:
+                self.ui.btnTopCtr.setChecked(True)
+            elif obj.alignment & Qt.AlignBottom:
+                self.ui.btnBotCtr.setChecked(True)
+            else:
+                self.ui.btnMidCtr.setChecked(True)
+        self.ui.fontFace.setCurrentText(obj.family)
+        self.ui.fontSize.setCurrentText("{:g}".format(obj.ptSize/500))
+
+    @Slot(int)
+    def on_alignGroup_idClicked(self, id):
+        if self.ui.btnTopLeft.isChecked():
+            align = Qt.AlignTop | Qt.AlignLeft
+        elif self.ui.btnTopCtr.isChecked():
+            align = Qt.AlignTop | Qt.AlignVCenter
+        elif self.ui.btnTopRight.isChecked():
+            align = Qt.AlignTop | Qt.AlignRight
+        elif self.ui.btnMidLeft.isChecked():
+            align = Qt.AlignHCenter | Qt.AlignLeft
+        elif self.ui.btnMidCtr.isChecked():
+            align = Qt.AlignHCenter | Qt.AlignVCenter
+        elif self.ui.btnMidRight.isChecked():
+            align = Qt.AlignHCenter | Qt.AlignRight
+        elif self.ui.btnBotLeft.isChecked():
+            align = Qt.AlignBottom| Qt.AlignLeft
+        elif self.ui.btnBotCtr.isChecked():
+            align = Qt.AlignBottom | Qt.AlignVCenter
+        else:
+            align = Qt.AlignBottom | Qt.AlignRight
+        self.obj.alignment = align
+        self.edited.emit()
+
+    @Slot(str)
+    def on_text_textEdited(self, text):
+        if self.obj:
+            self.obj.text = text
+            self.edited.emit()
+
+    @Slot(QFont)
+    def on_fontFace_currentFontChanged(self, font):
+        if self.obj:
+            self.obj.family = font.family()
+            self.edited.emit()
+
+    @Slot(str)
+    def on_fontSize_editTextChanged(self, text):
+        if self.obj:
+            self.obj.ptSize = int(float(text)*500)
+            self.edited.emit()
