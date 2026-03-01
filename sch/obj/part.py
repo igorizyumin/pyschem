@@ -1,4 +1,4 @@
-from PySide6.QtCore import QPoint
+from PySide6.QtCore import QPoint, QRect
 from PySide6.QtGui import QPainter, QTransform
 import sch.obj.proptext
 from lxml import etree

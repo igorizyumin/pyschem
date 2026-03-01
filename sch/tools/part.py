@@ -13,6 +13,7 @@ import copy
 
 
 class PartTool(QObject):
+    sigUpdate = Signal()
 
     def __init__(self, ctrl):
         QObject.__init__(self)
@@ -44,11 +45,16 @@ class PartTool(QObject):
             self.sigUpdate.emit()
             e.handled = True
         elif e.evType == sch.controller.Event.Type.MouseReleased:
-            cmd = sch.document.ObjAddCmd(self._obj)
-            self._ctrl.doc.doCommand(cmd)
-            self._obj = copy.copy(self._obj)
-            self._inspector.obj = self._obj
+            if self._hasValidMaster():
+                cmd = sch.document.ObjAddCmd(self._obj)
+                self._ctrl.doc.doCommand(cmd)
+                self._obj = copy.copy(self._obj)
+                self._inspector.obj = self._obj
             e.handled = True
+
+    def _hasValidMaster(self):
+        """Check if the part has a valid master symbol selected."""
+        return self._obj._master is not None
 
     @Slot(str, str)
     def onMasterChanged(self, path, sym):
