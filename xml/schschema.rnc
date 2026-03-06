@@ -46,6 +46,23 @@ KeyValueProp = element prop {
     xsd:string
 }
 
+# Property template definition for symbol masters
+PropertyTemplate = element prop {
+    attribute name { xsd:string },
+    attribute editable { Bool }?,
+    attribute visible { Bool }?,
+    attribute required { Bool }?,
+    attribute type { xsd:string }?,
+    attribute order { xsd:string }?,
+    xsd:string?
+}
+
+# Property override for part instances
+PropertyOverride = element prop {
+    attribute name { xsd:string },
+    xsd:string
+}
+
 # toplevel element
 XSch = element xSchematic
 { 
@@ -83,7 +100,7 @@ SymPart = element symPart
     # identifies the sub-part
     # note: can be a vector; (e.g. inv[1:6] for a 6x inverter)
     attribute name { xsd:string },
-    element props { KeyValueProp* },
+    element props { PropertyTemplate* },
     element objects { SymObject* }
 }
 
@@ -134,7 +151,7 @@ Page = element page
     element objects { SchObject* }
 }
 
-SchObject = ( Line | Text | Part | Net )
+SchObject = ( Line | Text | Part | Net | SheetRef )
 
 Part = element part
 {
@@ -145,10 +162,10 @@ Part = element part
     CoordsAttr,
     RotAttr,
     MirrorAttr,
+    # property overrides (instance-specific values)
+    element props { PropertyOverride* }?,
     # prop text overrides
-    PropText*,
-    # attribute overrides
-    KeyValueProp*
+    PropText*
 }
 
 Net = element net
@@ -157,3 +174,30 @@ Net = element net
     PropText*,
     KeyValueProp*
 }
+
+# Sheet reference for hierarchical design
+SheetRef = element sheetRef
+{
+    attribute docPath { xsd:string },
+    attribute pageName { xsd:string },
+    CoordsAttr,
+    RotAttr,
+    MirrorAttr,
+    # sheet reference properties
+    element props { KeyValueProp* }?,
+    # port definitions
+    element ports { Port* }?
+}
+
+# Port definition for sheet references
+Port = element port
+{
+    attribute name { xsd:string },
+    attribute direction { "input" | "output" | "bidirectional" | "passive" | "uncertain" },
+    attribute visible { Bool }?,
+    attribute isBus { Bool }?,
+    attribute width { xsd:int }?,
+    attribute startIndex { xsd:int }?,
+    attribute x { Coord }?,
+    attribute y { Coord }?,
+    attribute nets { xsd:string

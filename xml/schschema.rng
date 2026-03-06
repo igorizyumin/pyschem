@@ -1,22 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<grammar xmlns="http://relaxng.org/ns/structure/1.0" datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
-  <!-- RELAX NG schema for pyschem file format -->
+<grammar xmlns="http://relaxng.org/ns/structure/1.0"
+         datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
   <start>
     <ref name="XSch"/>
   </start>
-  <!--
-    basic types
-    boolean value
-  -->
   <define name="Bool">
     <choice>
       <value>1</value>
       <value>0</value>
     </choice>
   </define>
-  <!-- horizontal alignment -->
   <define name="AlignHorizAttr">
-    <attribute name="hAlign">
+    <attribute>
+      <name ns="">hAlign</name>
       <choice>
         <value>left</value>
         <value>center</value>
@@ -24,9 +20,9 @@
       </choice>
     </attribute>
   </define>
-  <!-- vertical alignment -->
   <define name="AlignVertAttr">
-    <attribute name="vAlign">
+    <attribute>
+      <name ns="">vAlign</name>
       <choice>
         <value>top</value>
         <value>middle</value>
@@ -34,45 +30,45 @@
       </choice>
     </attribute>
   </define>
-  <!-- unique universal identifier -->
   <define name="UuidStr">
     <data type="string">
       <param name="length">36</param>
     </data>
   </define>
   <define name="Uuid">
-    <element name="uuid">
+    <element>
+      <name ns="">uuid</name>
       <ref name="UuidStr"/>
     </element>
   </define>
-  <!-- dimension data type -->
   <define name="Dimension">
     <data type="int">
       <param name="minInclusive">0</param>
     </data>
   </define>
-  <!-- object id type -->
   <define name="ObjID">
     <data type="int">
       <param name="minInclusive">0</param>
     </data>
   </define>
-  <!-- coordinate data type -->
   <define name="Coord">
     <data type="int"/>
   </define>
-  <!-- x,y coordinate pair as attributes -->
   <define name="CoordsAttr">
-    <attribute name="x">
-      <ref name="Coord"/>
-    </attribute>
-    <attribute name="y">
-      <ref name="Coord"/>
-    </attribute>
+    <group>
+      <attribute>
+        <name ns="">x</name>
+        <ref name="Coord"/>
+      </attribute>
+      <attribute>
+        <name ns="">y</name>
+        <ref name="Coord"/>
+      </attribute>
+    </group>
   </define>
-  <!-- rotation; currently only 90 degree increments -->
   <define name="RotAttr">
-    <attribute name="rot">
+    <attribute>
+      <name ns="">rot</name>
       <choice>
         <value>0</value>
         <value>90</value>
@@ -81,81 +77,150 @@
       </choice>
     </attribute>
   </define>
-  <!-- mirroring along Y axis -->
   <define name="MirrorAttr">
-    <attribute name="mirror">
+    <attribute>
+      <name ns="">mirror</name>
       <ref name="Bool"/>
     </attribute>
   </define>
-  <!-- arc direction attributes -->
   <define name="ArcDirAttr">
-    <attribute name="dir">
+    <attribute>
+      <name ns="">dir</name>
       <choice>
         <value>cw</value>
         <value>ccw</value>
       </choice>
     </attribute>
   </define>
-  <!-- text position/rotation attributes -->
   <define name="TextPosAttr">
-    <ref name="CoordsAttr"/>
-    <ref name="RotAttr"/>
-    <ref name="AlignHorizAttr"/>
-    <ref name="AlignVertAttr"/>
+    <group>
+      <ref name="CoordsAttr"/>
+      <ref name="RotAttr"/>
+      <ref name="AlignHorizAttr"/>
+      <ref name="AlignVertAttr"/>
+    </group>
   </define>
-  <!-- text formatting attributes -->
   <define name="TextFormatAttr">
-    <attribute name="fontFamily">
-      <data type="string"/>
-    </attribute>
-    <attribute name="fontSize">
-      <ref name="Dimension"/>
-    </attribute>
+    <group>
+      <attribute>
+        <name ns="">fontFamily</name>
+        <data type="string"/>
+      </attribute>
+      <attribute>
+        <name ns="">fontSize</name>
+        <ref name="Dimension"/>
+      </attribute>
+    </group>
   </define>
-  <!-- line attributes -->
   <define name="LineAttr">
-    <attribute name="weight">
-      <ref name="Dimension"/>
-    </attribute>
-    <attribute name="x1">
-      <ref name="Coord"/>
-    </attribute>
-    <attribute name="y1">
-      <ref name="Coord"/>
-    </attribute>
-    <attribute name="x2">
-      <ref name="Coord"/>
-    </attribute>
-    <attribute name="y2">
-      <ref name="Coord"/>
-    </attribute>
+    <group>
+      <attribute>
+        <name ns="">weight</name>
+        <ref name="Dimension"/>
+      </attribute>
+      <attribute>
+        <name ns="">x1</name>
+        <ref name="Coord"/>
+      </attribute>
+      <attribute>
+        <name ns="">y1</name>
+        <ref name="Coord"/>
+      </attribute>
+      <attribute>
+        <name ns="">x2</name>
+        <ref name="Coord"/>
+      </attribute>
+      <attribute>
+        <name ns="">y2</name>
+        <ref name="Coord"/>
+      </attribute>
+    </group>
   </define>
-  <!-- net attributes -->
   <define name="NetAttr">
-    <attribute name="x1">
-      <ref name="Coord"/>
-    </attribute>
-    <attribute name="y1">
-      <ref name="Coord"/>
-    </attribute>
-    <attribute name="x2">
-      <ref name="Coord"/>
-    </attribute>
-    <attribute name="y2">
-      <ref name="Coord"/>
-    </attribute>
+    <group>
+      <attribute>
+        <name ns="">x1</name>
+        <ref name="Coord"/>
+      </attribute>
+      <attribute>
+        <name ns="">y1</name>
+        <ref name="Coord"/>
+      </attribute>
+      <attribute>
+        <name ns="">x2</name>
+        <ref name="Coord"/>
+      </attribute>
+      <attribute>
+        <name ns="">y2</name>
+        <ref name="Coord"/>
+      </attribute>
+    </group>
   </define>
   <define name="KeyValueProp">
-    <element name="prop">
-      <attribute name="name">
+    <element>
+      <name ns="">prop</name>
+      <attribute>
+        <name ns="">name</name>
         <data type="string"/>
       </attribute>
       <data type="string"/>
     </element>
   </define>
-  <!-- toplevel element -->
+  <define name="PropertyTemplate">
+    <element>
+      <name ns="">prop</name>
+      <attribute>
+        <name ns="">name</name>
+        <data type="string"/>
+      </attribute>
+      <optional>
+        <attribute>
+          <name ns="">editable</name>
+          <ref name="Bool"/>
+        </attribute>
+      </optional>
+      <optional>
+        <attribute>
+          <name ns="">visible</name>
+          <ref name="Bool"/>
+        </attribute>
+      </optional>
+      <optional>
+        <attribute>
+          <name ns="">required</name>
+          <ref name="Bool"/>
+        </attribute>
+      </optional>
+      <optional>
+        <attribute>
+          <name ns="">type</name>
+          <data type="string"/>
+        </attribute>
+      </optional>
+      <optional>
+        <attribute>
+          <name ns="">order</name>
+          <data type="string"/>
+        </attribute>
+      </optional>
+      <optional>
+        <data type="string"/>
+      </optional>
+    </element>
+  </define>
+  <define name="PropertyOverride">
+    <element>
+      <name ns="">prop</name>
+      <attribute>
+        <name ns="">name</name>
+        <data type="string"/>
+      </attribute>
+      <data type="string"/>
+    </element>
+  </define>
   <define name="XSch">
-    <element name="xSchematic">
+    <element>
+      <name ns="">xSchematic</name>
       <ref name="Properties"/>
       <optional>
         <ref name="Symbol"/>
@@ -165,18 +230,18 @@
       </optional>
     </element>
   </define>
-  <!-- Schematic cell properties -->
   <define name="Properties">
-    <element name="props">
+    <element>
+      <name ns="">props</name>
       <ref name="Uuid"/>
       <zeroOrMore>
         <ref name="KeyValueProp"/>
       </zeroOrMore>
     </element>
   </define>
-  <!-- Symbol description -->
   <define name="Symbol">
-    <element name="symbol">
+    <element>
+      <name ns="">symbol</name>
       <ref name="SymProps"/>
       <oneOrMore>
         <ref name="SymPart"/>
@@ -184,7 +249,8 @@
     </element>
   </define>
   <define name="SymProps">
-    <element name="props">
+    <element>
+      <name ns="">props</name>
       <zeroOrMore>
         <ref name="KeyValueProp"/>
       </zeroOrMore>
@@ -193,21 +259,26 @@
       </zeroOrMore>
     </element>
   </define>
-  <!-- pin mapping - - maps logical pins to physical pins -->
   <define name="PinMap">
-    <element name="pinMap">
-      <attribute name="name">
+    <element>
+      <name ns="">pinMap</name>
+      <attribute>
+        <name ns="">name</name>
         <data type="string"/>
       </attribute>
       <oneOrMore>
-        <element name="map">
-          <attribute name="part">
+        <element>
+          <name ns="">map</name>
+          <attribute>
+            <name ns="">part</name>
             <data type="string"/>
           </attribute>
-          <attribute name="from">
+          <attribute>
+            <name ns="">from</name>
             <data type="string"/>
           </attribute>
-          <attribute name="to">
+          <attribute>
+            <name ns="">to</name>
             <data type="string"/>
           </attribute>
         </element>
@@ -215,20 +286,20 @@
     </element>
   </define>
   <define name="SymPart">
-    <element name="symPart">
-      <!--
-        identifies the sub-part
-        note: can be a vector; (e.g. inv[1:6] for a 6x inverter)
-      -->
-      <attribute name="name">
+    <element>
+      <name ns="">symPart</name>
+      <attribute>
+        <name ns="">name</name>
         <data type="string"/>
       </attribute>
-      <element name="props">
+      <element>
+        <name ns="">props</name>
         <zeroOrMore>
-          <ref name="KeyValueProp"/>
+          <ref name="PropertyTemplate"/>
         </zeroOrMore>
       </element>
-      <element name="objects">
+      <element>
+        <name ns="">objects</name>
         <zeroOrMore>
           <ref name="SymObject"/>
         </zeroOrMore>
@@ -243,70 +314,74 @@
       <ref name="Pin"/>
     </choice>
   </define>
-  <!-- Pin definition -->
   <define name="Pin">
-    <element name="pin">
-      <!--
-        logical identifier (e.g. "in[3:0]" or "21" or "B3")
-        identifiers can be either pin numbers or they can be logical names or buses
-      -->
-      <attribute name="id">
+    <element>
+      <name ns="">pin</name>
+      <attribute>
+        <name ns="">id</name>
         <data type="string"/>
       </attribute>
-      <!-- annotation (e.g. "nRST") -->
-      <attribute name="desc">
+      <attribute>
+        <name ns="">desc</name>
         <data type="string"/>
       </attribute>
       <ref name="CoordsAttr"/>
       <ref name="RotAttr"/>
       <zeroOrMore>
-        <!-- annotation and number label locations / visibility -->
         <ref name="PropText"/>
       </zeroOrMore>
     </element>
   </define>
   <define name="Line">
-    <element name="line">
+    <element>
+      <name ns="">line</name>
       <ref name="LineAttr"/>
     </element>
   </define>
-  <!-- static annotation text -->
   <define name="Text">
-    <element name="text">
+    <element>
+      <name ns="">text</name>
       <ref name="TextPosAttr"/>
       <ref name="TextFormatAttr"/>
       <data type="string"/>
     </element>
   </define>
-  <!-- property text refers to a property (e.g. the ref des or value) -->
   <define name="PropText">
-    <element name="proptext">
+    <element>
+      <name ns="">proptext</name>
       <ref name="TextPosAttr"/>
       <ref name="TextFormatAttr"/>
-      <attribute name="visible">
+      <attribute>
+        <name ns="">visible</name>
         <ref name="Bool"/>
       </attribute>
-      <attribute name="showName">
+      <attribute>
+        <name ns="">showName</name>
         <ref name="Bool"/>
       </attribute>
-      <attribute name="prop">
+      <attribute>
+        <name ns="">prop</name>
         <data type="string"/>
       </attribute>
     </element>
   </define>
   <define name="Pages">
-    <element name="pages">
+    <element>
+      <name ns="">pages</name>
       <zeroOrMore>
         <ref name="Page"/>
       </zeroOrMore>
     </element>
   </define>
   <define name="Page">
-    <element name="page">
-      <attribute name="name">
+    <element>
+      <name ns="">page</name>
+      <attribute>
+        <name ns="">name</name>
         <data type="string"/>
       </attribute>
-      <element name="objects">
+      <element>
+        <name ns="">objects</name>
         <zeroOrMore>
           <ref name="SchObject"/>
         </zeroOrMore>
@@ -319,33 +394,39 @@
       <ref name="Text"/>
       <ref name="Part"/>
       <ref name="Net"/>
+      <ref name="SheetRef"/>
     </choice>
   </define>
   <define name="Part">
-    <element name="part">
-      <!-- path to master cell -->
-      <attribute name="schPath">
+    <element>
+      <name ns="">part</name>
+      <attribute>
+        <name ns="">schPath</name>
         <data type="string"/>
       </attribute>
-      <!-- id of the sub-part (vector index is optional) -->
-      <attribute name="partId">
+      <attribute>
+        <name ns="">partId</name>
         <data type="string"/>
       </attribute>
       <ref name="CoordsAttr"/>
       <ref name="RotAttr"/>
       <ref name="MirrorAttr"/>
+      <optional>
+        <element>
+          <name ns="">props</name>
+          <zeroOrMore>
+            <ref name="PropertyOverride"/>
+          </zeroOrMore>
+        </element>
+      </optional>
       <zeroOrMore>
-        <!-- prop text overrides -->
         <ref name="PropText"/>
-      </zeroOrMore>
-      <zeroOrMore>
-        <!-- attribute overrides -->
-        <ref name="KeyValueProp"/>
       </zeroOrMore>
     </element>
   </define>
   <define name="Net">
-    <element name="net">
+    <element>
+      <name ns="">net</name>
       <ref name="NetAttr"/>
       <zeroOrMore>
         <ref name="PropText"/>
@@ -353,6 +434,99 @@
       <zeroOrMore>
         <ref name="KeyValueProp"/>
       </zeroOrMore>
+    </element>
+  </define>
+  <define name="SheetRef">
+    <element>
+      <name ns="">sheetRef</name>
+      <attribute>
+        <name ns="">docPath</name>
+        <data type="string"/>
+      </attribute>
+      <attribute>
+        <name ns="">pageName</name>
+        <data type="string"/>
+      </attribute>
+      <ref name="CoordsAttr"/>
+      <ref name="RotAttr"/>
+      <ref name="MirrorAttr"/>
+      <optional>
+        <element>
+          <name ns="">props</name>
+          <zeroOrMore>
+            <ref name="KeyValueProp"/>
+          </zeroOrMore>
+        </element>
+      </optional>
+      <optional>
+        <element>
+          <name ns="">ports</name>
+          <zeroOrMore>
+            <ref name="Port"/>
+          </zeroOrMore>
+        </element>
+      </optional>
+    </element>
+  </define>
+  <define name="Port">
+    <element>
+      <name ns="">port</name>
+      <attribute>
+        <name ns="">name</name>
+        <data type="string"/>
+      </attribute>
+      <attribute>
+        <name ns="">direction</name>
+        <choice>
+          <value>input</value>
+          <value>output</value>
+          <value>bidirectional</value>
+          <value>passive</value>
+          <value>uncertain</value>
+        </choice>
+      </attribute>
+      <optional>
+        <attribute>
+          <name ns="">visible</name>
+          <ref name="Bool"/>
+        </attribute>
+      </optional>
+      <optional>
+        <attribute>
+          <name ns="">isBus</name>
+          <ref name="Bool"/>
+        </attribute>
+      </optional>
+      <optional>
+        <attribute>
+          <name ns="">width</name>
+          <data type="int"/>
+        </attribute>
+      </optional>
+      <optional>
+        <attribute>
+          <name ns="">startIndex</name>
+          <data type="int"/>
+        </attribute>
+      </optional>
+      <optional>
+        <attribute>
+          <name ns="">x</name>
+          <ref name="Coord"/>
+        </attribute>
+      </optional>
+      <optional>
+        <attribute>
+          <name ns="">y</name>
+          <ref name="Coord"/>
+        </attribute>
+      </optional>
+      <optional>
+        <attribute>
+          <name ns="">nets</name>
+          <data type="string"/>
+        </attribute>
+      </optional>
     </element>
   </define>
 </grammar>

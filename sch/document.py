@@ -1,4 +1,5 @@
 import copy
+from typing import List
 from uuid import UUID, uuid4
 from PySide6.QtCore import *
 from PySide6.QtGui import QUndoStack, QUndoCommand
@@ -9,6 +10,9 @@ import sch.obj.net
 import sch.obj.text
 import sch.obj.part
 import sch.obj.proptext
+import sch.obj.property
+import sch.obj.sheetref
+import sch.obj.port
 
 class MasterDocument(QObject):
     # indicates document structure has changed (NOT sub-documents; those have their own signals)
@@ -209,6 +213,33 @@ class DocPage(AbstractPage):
     def __init__(self, parent: MasterDocument):
         super().__init__(parent)
         self._name = "Page1"
+        self._sheet_refs: List[sch.obj.sheetref.SheetRefObj] = []
+
+    def sheetReferences(self) -> List[sch.obj.sheetref.SheetRefObj]:
+        """Get all sheet references on this page."""
+        return list(self._sheet_refs)
+
+    def addSheetReference(self, ref: sch.obj.sheetref.SheetRefObj) -> None:
+        """
+        Add a sheet reference to this page.
+        
+        Args:
+            ref: SheetRefObj to add
+        """
+        self._sheet_refs.append(ref)
+        self._objs.add(ref)
+        ref.setDoc(self._parent)
+
+    def removeSheetReference(self, ref: sch.obj.sheetref.SheetRefObj) -> None:
+        """
+        Remove a sheet reference from this page.
+        
+        Args:
+            ref: SheetRefObj to remove
+        """
+        if ref in self._sheet_refs:
+            self._sheet_refs.remove(ref)
+        self._objs.discard(ref)
 
     def fromXml(self, pageNode):
         self._name = pageNode.attrib["name"]
@@ -224,6 +255,9 @@ class DocPage(AbstractPage):
                 part = sch.obj.part.PartObj.fromXml(obj, self._parent.lib)
                 self._objs.add(part)
                 self._objs |= set(part.children())
+            elif obj.tag == "sheetRef":
+                sheet_ref = sch.obj.sheetref.SheetRefObj.fromXml(obj, self._parent)
+                self.addSheetReference(sheet_ref)
 
     def toXml(self, parentNode):
         page = etree.SubElement(parentNode, "page", name=self.name)
@@ -233,40 +267,112 @@ class DocPage(AbstractPage):
 
 
 class SymbolPage(AbstractPage):
+    """
+    Represents a symbol master definition.
+    
+    Contains property templates that define the properties available
+    when parts of this symbol type are instantiated on schematics.
+    """
+    
     def __init__(self, parent: MasterDocument):
         super().__init__(parent)
         self._name = "symbol"
-        self._pageProps = {}
+        self._property_templates: List[sch.obj.property.PropertyTemplate] = []
 
-    def getProp(self, name):
-        if name in self._pageProps:
-            return self._pageProps[name]
-        else:
-            return ''
+    @property
+    def property_templates(self) -> List[sch.obj.property.PropertyTemplate]:
+        """Get all property templates defined for this symbol."""
+        return list(self._property_templates)
 
-    def setProp(self, name, value):
-        self._pageProps[name] = value
+    def add_property_template(self, template: sch.obj.property.PropertyTemplate) -> None:
+        """Add a property template to this symbol."""
+        self._property_templates.append(template)
+
+    def get_property_template(self, name: str) -> sch.obj.property.PropertyTemplate:
+        """
+        Get a property template by name.
+        
+        Args:
+            name: The property name
+            
+        Returns:
+            The PropertyTemplate or None if not found
+        """
+        for template in self._property_templates:
+            if template.name == name:
+                return template
+        return None
 
     def fromXml(self, symNode):
+        """
+        Parse symbol from XML element.
+        
+        Args:
+            symNode: XML element containing symPart data
+        """
         self._name = symNode.attrib["name"]
-        props = symNode.find("props")
-        for prop in props:
-            self._pageProps[prop.attrib['name']] = prop.text
+        
+        # Parse property templates
+        self._property_templates = []
+        props_elem = symNode.find("props")
+        if props_elem is not None:
+            for prop in props_elem:
+                if prop.tag == 'prop':
+                    template = sch.obj.property.PropertyTemplate(
+                        name=prop.attrib.get('name', ''),
+                        default_value=prop.text or '',
+                        editable=(prop.attrib.get('editable', '1') == '1'),
+                        visible=(prop.attrib.get('visible', '1') == '1'),
+                        required=(prop.attrib.get('required', '0') == '1'),
+                        property_type=prop.attrib.get('type', 'text'),
+                        enum_values=[],  # Will need to parse from attribute if present
+                        display_order=int(prop.attrib.get('order', '0'))
+                    )
+                    self._property_templates.append(template)
+        
+        # Parse objects
         objs = symNode.find("objects")
-        for obj in objs:
-            if obj.tag == "line":
-                self._objs.add(sch.obj.line.LineObj.fromXml(obj))
-            elif obj.tag == 'proptext':
-                self._objs.add(sch.obj.proptext.PropTextObj.fromXml(obj, self))
-            elif obj.tag == 'text':
-                self._objs.add(sch.obj.text.TextObj.fromXml(obj))
+        if objs is not None:
+            for obj in objs:
+                if obj.tag == "line":
+                    self._objs.add(sch.obj.line.LineObj.fromXml(obj))
+                elif obj.tag == 'proptext':
+                    self._objs.add(sch.obj.proptext.PropTextObj.fromXml(obj, self))
+                elif obj.tag == 'text':
+                    self._objs.add(sch.obj.text.TextObj.fromXml(obj))
 
     def toXml(self, parentNode):
+        """
+        Serialize symbol to XML element.
+        
+        Args:
+            parentNode: Parent XML element to append to
+        """
         page = etree.SubElement(parentNode, "symPart", name=self.name)
+        
+        # Write property templates
         props = etree.SubElement(page, "props")
-        for key, value in self._pageProps.items():
-            pp = etree.SubElement(props, "prop", name=key)
-            pp.text = value
+        for template in self._property_templates:
+            pp = etree.SubElement(props, "prop", name=template.name)
+            pp.text = template.default_value
+            if template.editable:
+                pp.set('editable', '1')
+            else:
+                pp.set('editable', '0')
+            if template.visible:
+                pp.set('visible', '1')
+            else:
+                pp.set('visible', '0')
+            if template.required:
+                pp.set('required', '1')
+            else:
+                pp.set('required', '0')
+            if template.property_type != 'text':
+                pp.set('type', template.property_type)
+            if template.display_order != 0:
+                pp.set('order', str(template.display_order))
+        
+        # Write objects
         objs = etree.SubElement(page, "objects")
         for obj in self._objs:
             obj.toXml(objs)
