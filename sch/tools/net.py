@@ -1,14 +1,34 @@
-from PySide6.QtCore import QObject, Signal, Slot, QPoint, QPointF, Qt, QRect
-from PySide6.QtGui import QPainter, QPen, QBrush, QUndoCommand
+from PySide6.QtCore import QObject, Signal, Slot, QPoint, Qt
+from PySide6.QtGui import QPainter, QPen
 import sch.document
 import sch.controller
-from sch.utils import LayerType, Layer, Geom, Point
+from sch.utils import LayerType, Layer
 from sch.obj.net import NetObj
 from sch.tools.base import EditHandle, BaseEditor
-from lxml import etree
-from collections import defaultdict
 from sch.view import Event
-from typing import List
+
+import os
+import sys
+
+
+_NET_TRACE_ENABLED = os.environ.get("PYSCHEM_NET_TRACE", "0") not in ("", "0", "false", "False")
+
+
+def _trace(message):
+    if _NET_TRACE_ENABLED:
+        print("[NETTRACE] {}".format(message), file=sys.stderr, flush=True)
+
+
+def _fmt_net(net):
+    return "{}@{:x}({},{})-({},{})".format(
+        type(net).__name__, id(net), net.pt1.x(), net.pt1.y(),
+        net.pt2.x(), net.pt2.y())
+
+
+def _fmt_graph(doc):
+    nets = list(doc.objects(objType=NetObj))
+    nets.sort(key=lambda net: (net.pt1.x(), net.pt1.y(), net.pt2.x(), net.pt2.y(), id(net)))
+    return "[{}]".format(", ".join(_fmt_net(net) for net in nets))
 
 
 class NetTool(QObject):
@@ -61,94 +81,122 @@ class NetTool(QObject):
             self.sigUpdate.emit()
             e.handled = True
 
+
+
     def addNet(self, newNet):
-        print("new net ({},{})->({},{})".format(newNet.pt1.x(), newNet.pt1.y(), newNet.pt2.x(), newNet.pt2.y()))
-        # this algorithm normalizes the nets such that nets touch only at endpoints
+        """Add a wire by normalizing the complete integer-coordinate graph."""
         assert type(newNet.pt1) is QPoint and type(newNet.pt2) is QPoint
-        origin = newNet.pt1
-        newDir = newNet.pt2 - newNet.pt1
-        unitNewDir = QPointF(newDir)
-        unitNewDir /= Geom.norm(unitNewDir)
-        # nets to be deleted
-        netsDel = set()
-        netsAdd = set()
-        # find any non-parallel nets that need to be split
-        splitP1 = self._ctrl.doc.findObjsNear(newNet.pt1, objType=NetObj)
-        splitP2 = self._ctrl.doc.findObjsNear(newNet.pt2, objType=NetObj)
-        for net in splitP1:
-            if (net.touchesPt(newNet.pt1)
-               and not Geom.isParallel(newDir, net.pt2-net.pt1)
-               and not net.connVtx(newNet)):
-                netsDel.add(net)
-                netsAdd.add(NetObj(newNet.pt1, net.pt1))
-                netsAdd.add(NetObj(newNet.pt1, net.pt2))
-        for net in splitP2:
-            if (net.touchesPt(newNet.pt2)
-               and not Geom.isParallel(newDir, net.pt2-net.pt1)
-               and not net.connVtx(newNet)):
-                netsDel.add(net)
-                netsAdd.add(NetObj(newNet.pt2, net.pt1))
-                netsAdd.add(NetObj(newNet.pt2, net.pt2))
-        # find all intersecting nets
-        xsnets = {net for net in self._ctrl.doc.findObjsInRect(newNet.bbox(), objType=NetObj)
-                  if newNet.intersectsNet(net)}
-        # collinear nets (which need to be replaced)
-        clnets = {net for net in xsnets if Geom.isParallel(newDir, net.pt2-net.pt1)}
-        print("collinear: " + str(clnets))
-        xsnets -= clnets    # remove collinear nets from set of intersections
-        # compute union of all nets to be replaced
-        # coordinates of united nets (projected onto newDir); initialize with new net coords
-        coords = {0, Geom.dotProd(unitNewDir, newNet.pt2-origin)}
-        for net in clnets:
-            if net.touchesPt(newNet.pt1) and net.touchesPt(newNet.pt2):
-                # print("Not adding redundant net")
-                return  # new net is redundant because it is on top of an existing net
-            coords.add(Geom.dotProd(unitNewDir, net.pt1-origin))
-            coords.add(Geom.dotProd(unitNewDir, net.pt2-origin))
-        netsDel |= clnets
-        # find all intersection points
-        minc = min(coords)
-        maxc = max(coords)
-        start_point = origin + (unitNewDir * minc).toPoint()
-        end_point = origin + (unitNewDir * maxc).toPoint()
-        unitedNet = NetObj(start_point, end_point)
-        # these nets touch the new net with an endpoint
-        xsP1 = {net for net in xsnets if unitedNet.touchesPt(net.pt1) and not unitedNet.connVtx(net)}
-        xsP2 = {net for net in xsnets if unitedNet.touchesPt(net.pt2) and not unitedNet.connVtx(net)}
-        # print("touching: " + str(xsP1 | xsP2))
-        xscoords = {minc, maxc}
-        for net in xsP1:
-            xscoords.add(Geom.dotProd(unitNewDir, net.pt1-origin))
-        for net in xsP2:
-            xscoords.add(Geom.dotProd(unitNewDir, net.pt2-origin))
-        xscoords = list(xscoords)
-        xscoords.sort()
-        # print(xscoords)
-        p1 = xscoords.pop(0)
-        while xscoords:
-            p2 = xscoords.pop(0)
-            start_point = origin + (unitNewDir * p1).toPoint()
-            end_point = origin + (unitNewDir * p2).toPoint()
-            netsAdd.add(NetObj(start_point, end_point))
-            p1 = p2
-        cmd = sch.document.BaseUndoCmd("add net")
-        for obj in netsDel:
-            print("deleting {}".format(str(obj)))
-            sch.document.ObjDelCmd(obj, doc=self._ctrl.doc, parent=cmd)
-        for obj in netsAdd:
-            print("adding: {}".format(str(obj)))
-            sch.document.ObjAddCmd(obj, doc=self._ctrl.doc, parent=cmd)
+        current = list(self._ctrl.doc.objects(objType=NetObj))
+        before = [NetObj(net.pt1, net.pt2) for net in current]
+        normalized = NetObj._normalizeGeometry(current + [newNet])
+        _trace("add net current={} normalized={}".format(len(current), len(normalized)))
+        cmd = NetGraphCmd(self._ctrl.doc, current, before, normalized)
         self._ctrl.doc.doCommand(cmd)
+
+
+class NetGraphCmd(sch.document.BaseUndoCmd):
+    """Undo command for replacing the complete net topology of a page."""
+
+    def __init__(self, doc, initial, before, after):
+        super().__init__("normalize net graph", doc=doc)
+        self._initial = list(initial)
+        self._before = list(before)
+        self._after = list(after)
+        self._first_redo = True
+        _trace("cmd create id={:x} initial={} before={} after={}".format(
+            id(self), len(self._initial), len(self._before), len(self._after)))
+
+    def _replace(self, remove, add):
+        _trace("cmd replace id={:x} remove={} add={} graph_before={}".format(
+            id(self), len(remove), len(add), _fmt_graph(self.doc)))
+        # Snapshot objects are intentionally new instances. Replace the
+        # complete net graph instead of relying on object identity.
+        self.doc.replaceObjects(remove, add, objType=NetObj)
+        _trace("cmd replace id={:x} graph_after={}".format(id(self), _fmt_graph(self.doc)))
+
+    def redo(self):
+        remove = self._initial if self._first_redo else self._before
+        _trace("cmd redo id={:x} first={} stack_index={} remove={} add={}".format(
+            id(self), self._first_redo, self.doc.undoStack.index(), len(remove), len(self._after)))
+        self._replace(remove, self._after)
+        self._first_redo = False
+
+    def undo(self):
+        _trace("cmd undo id={:x} stack_index={} remove={} add={}".format(
+            id(self), self.doc.undoStack.index(), len(self._after), len(self._before)))
+        self._replace(self._after, self._before)
+
+
+class NetDragSession:
+    """Immutable preview transaction for moving a net endpoint/junction."""
+
+    def __init__(self, nets, selected, handle_index):
+        self._source = list(nets)
+        self._baseline = [NetObj(net.pt1, net.pt2) for net in self._source]
+        self._selected_index = next(
+            index for index, net in enumerate(self._source) if net is selected)
+        selected_net = self._baseline[self._selected_index]
+        self._anchor = selected_net.pt1 if handle_index == 0 else selected_net.pt2
+        self._affected = tuple(
+            index for index, net in enumerate(self._baseline)
+            if net.pt1 == self._anchor or net.pt2 == self._anchor)
+        self._preview = list(self._baseline)
+        self._cursor = QPoint(self._anchor)
+
+    @property
+    def source(self):
+        return list(self._source)
+
+    @property
+    def affected_source(self):
+        return [self._source[index] for index in self._affected]
+
+    @property
+    def anchor(self):
+        return QPoint(self._anchor)
+
+    @property
+    def cursor(self):
+        return QPoint(self._cursor)
+
+    @property
+    def preview(self):
+        return list(self._preview)
+
+    @property
+    def selected_preview(self):
+        return self._preview[self._selected_index]
+
+    def update(self, cursor):
+        self._cursor = QPoint(cursor)
+        offset = self._cursor - self._anchor
+        preview = []
+        affected = set(self._affected)
+        for index, net in enumerate(self._baseline):
+            if index not in affected:
+                preview.append(net)
+                continue
+            pt1 = net.pt1 + offset if net.pt1 == self._anchor else net.pt1
+            pt2 = net.pt2 + offset if net.pt2 == self._anchor else net.pt2
+            preview.append(net.with_endpoints(pt1, pt2))
+        self._preview = preview
+        return self.preview
+
 
 class NetEditor(BaseEditor):
 
     def __init__(self, ctrl, obj):
         super().__init__(ctrl, obj)
+        self._drag = None
+        # Normalization replaces nets with new segment objects.  Track undo
+        # stack transitions so this editor follows those replacements.
+        self._ctrl.doc.undoStack.indexChanged.connect(self._onUndoIndexChanged)
+        _trace("editor create id={:x} obj={} graph={}".format(
+            id(self), _fmt_net(obj), _fmt_graph(self._ctrl.doc)))
 
     def _create_change_command(self):
-        """Create the appropriate change command for NetObj."""
-        import sch.document
-        return sch.document.ObjChangeCmd(self._obj, self._ctrl.doc)
+        """Net edits use NetGraphCmd, not mutable-object mementos."""
+        return None
 
     def create_handles(self):
         """Create edit handles for net endpoints."""
@@ -163,130 +211,157 @@ class NetEditor(BaseEditor):
 
     def update_handles(self):
         """Update handle positions to match net endpoints."""
-        self._handles[0].pos = self._obj.pt1
-        self._handles[1].pos = self._obj.pt2
+        net = self._drag.selected_preview if self._drag else self._obj
+        self._handles[0].pos = net.pt1
+        self._handles[1].pos = net.pt2
+
+    def hiddenObjects(self):
+        """Return document nets replaced by the active preview."""
+        if self._drag is None:
+            return ()
+        return self._drag.affected_source
+
+    def previewObjects(self):
+        """Return the complete temporary graph for preview rendering."""
+        return self._drag.preview if self._drag is not None else None
+
+    def _replacementFor(self, endpoints, allow_partial=False):
+        """Find a replacement for the edited segment.
+
+        Commits require an exact match so a removed segment cannot select a
+        neighboring net. Undo/redo may split a segment, so it can use a
+        unique one-endpoint match as a fallback.
+        """
+        nets = list(self._ctrl.doc.objects(objType=NetObj))
+        for net in nets:
+            if net is self._obj:
+                return net
+
+        first, second = endpoints
+        for net in nets:
+            if ((net.pt1 == first and net.pt2 == second)
+                    or (net.pt1 == second and net.pt2 == first)):
+                return net
+        if allow_partial:
+            candidates = [net for net in nets
+                          if net.pt1 == first or net.pt2 == first
+                          or net.pt1 == second or net.pt2 == second]
+            if len(candidates) == 1:
+                return candidates[0]
+        return None
+
+    def _rebind(self, endpoints, allow_partial=False):
+        replacement = self._replacementFor(endpoints, allow_partial=allow_partial)
+        if replacement is None:
+            return False
+        self._obj = replacement
+        self.update_handles()
+        return True
+
+    def _onUndoIndexChanged(self, _index):
+        if self._disposed or self._drag is not None:
+            return
+        # QUndoStack emits this after the complete command has been applied,
+        # unlike the intermediate sigChanged signals from child commands.
+        _trace("editor indexChanged editor={:x} index={} obj={} graph={}".format(
+            id(self), _index, _fmt_net(self._obj), _fmt_graph(self._ctrl.doc)))
+        if not self._rebind((self._obj.pt1, self._obj.pt2), allow_partial=True):
+            _trace("editor rebind FAILED editor={:x} obj={} graph={}".format(
+                id(self), _fmt_net(self._obj), _fmt_graph(self._ctrl.doc)))
+            self.sigDone.emit()
+        else:
+            _trace("editor rebind OK editor={:x} obj={}".format(id(self), _fmt_net(self._obj)))
+
+    def _docChanged(self):
+        if self._disposed:
+            return
+        # Child add/delete commands can emit sigChanged while a compound
+        # command is only half-applied.  Do not destroy the editor there;
+        # indexChanged performs the final rebind once the command completes.
+        if self._ctrl.doc.hasObject(self._obj):
+            self.update_handles()
+        else:
+            _trace("editor docChanged stale editor={:x} obj={} graph={}".format(
+                id(self), _fmt_net(self._obj), _fmt_graph(self._ctrl.doc)))
+
+    def dispose(self):
+        if self._disposed:
+            return
+        try:
+            self._ctrl.doc.undoStack.indexChanged.disconnect(self._onUndoIndexChanged)
+        except (RuntimeError, TypeError):
+            pass
+        super().dispose()
 
     def draw_custom(self, painter):
         """Draw the net line."""
-        painter.drawLine(self._obj.pt1, self._obj.pt2)
+        if self._drag is None:
+            painter.drawLine(self._obj.pt1, self._obj.pt2)
+            return
+        for index in self._drag._affected:
+            net = self._drag.preview[index]
+            if net.pt1 != net.pt2:
+                painter.drawLine(net.pt1, net.pt2)
+
+    def _begin_drag(self, handle_index, pos):
+        if self._drag is None:
+            self._drag = NetDragSession(
+                self._ctrl.doc.objects(objType=NetObj), self._obj, handle_index)
+        self._drag.update(pos)
+        self.update_handles()
 
     @Slot('QPoint')
     def _dragPt1(self, pos):
         """Handle dragging of pt1 - move connected segments."""
-        offset = pos - self._obj.pt1
-        # Store original position for normalization
-        old_pt1 = self._obj.pt1
-        self._move_connected_segments(old_pt1, offset)
-        self._obj.pt1 = pos
+        self._begin_drag(0, pos)
         self.sigUpdate.emit()
 
     @Slot('QPoint')
     def _dragPt2(self, pos):
         """Handle dragging of pt2 - move connected segments."""
-        offset = pos - self._obj.pt2
-        # Store original position for normalization
-        old_pt2 = self._obj.pt2
-        self._move_connected_segments(old_pt2, offset)
-        self._obj.pt2 = pos
+        self._begin_drag(1, pos)
         self.sigUpdate.emit()
-
-    def _move_connected_segments(self, endpoint, offset):
-        """Move all net segments connected to the given endpoint by the offset."""
-        connected_nets = self._find_connected_segments(endpoint)
-        for net in connected_nets:
-            if net.pt1 == endpoint:
-                net.pt1 += offset
-            elif net.pt2 == endpoint:
-                net.pt2 += offset
-
-    def _find_connected_segments(self, endpoint):
-        """Find all net segments that share the given endpoint."""
-        connected = [self._obj]  # Include the edited net itself
-        for net in self._ctrl.doc.objects(objType=NetObj):
-            if net != self._obj and (net.pt1 == endpoint or net.pt2 == endpoint):
-                connected.append(net)
-        return connected
 
     def handle_custom_event(self, event):
         """Net editor doesn't handle custom events currently."""
+        if event.evType == sch.controller.Event.Type.Cancel and self._drag is not None:
+            self._drag = None
+            self.update_handles()
+            self.sigUpdate.emit()
+            event.handled = True
+            return
         super().handle_custom_event(event)
         if event.handled:
             return
 
     def _commit(self):
-        """Commit the net movement with normalization."""
-        # Create parent undo command
-        cmd = sch.document.BaseUndoCmd("move net endpoint", doc=self._ctrl.doc)
-        
-        # Store original positions before modification
-        old_pt1 = self._obj.pt1
-        old_pt2 = self._obj.pt2
-        
-        # Find all nets connected to each endpoint (for junction drag case)
-        connected_at_pt1 = self._find_connected_segments(old_pt1)
-        connected_at_pt2 = self._find_connected_segments(old_pt2)
-        
-        # Determine which case we're in:
-        # 1. Single net move (neither endpoint is a junction with other nets)
-        # 2. Junction drag at pt1 (multiple nets connected to pt1)
-        # 3. Junction drag at pt2 (multiple nets connected to pt2)
-        # 4. Junction drag at both ends
-        
-        # Use the appropriate normalization method
-        if (len(connected_at_pt1) > 1 or len(connected_at_pt2) > 1):
-            # Junction drag case - use junction drag normalization
-            self._normalize_junction_drag(cmd, old_pt1, old_pt2, connected_at_pt1, connected_at_pt2)
-        else:
-            # Single net move case
-            self._normalize_single_move(cmd, old_pt1, old_pt2)
-        
-        # Execute the command
+        """Normalize the current graph and commit it as one topology change."""
+        if self._drag is None:
+            return
+        current_nets = self._drag.source
+        before = [NetObj(net.pt1, net.pt2) for net in current_nets]
+        preview = self._drag.preview
+        normalized = NetObj._normalizeGeometry(preview)
+        edited = self._drag.selected_preview
+        edited_endpoints = (QPoint(edited.pt1), QPoint(edited.pt2))
+
+        _trace("commit editor={:x} current={} normalized={} endpoints=({},{})->({},{})".format(
+            id(self), len(current_nets), len(normalized),
+            edited_endpoints[0].x(), edited_endpoints[0].y(),
+            edited_endpoints[1].x(), edited_endpoints[1].y()))
+        _trace("commit graph_current={} graph_normalized={}".format(
+            _fmt_graph(self._ctrl.doc),
+            "[{}]".format(", ".join(_fmt_net(net) for net in normalized))))
+
+        cmd = NetGraphCmd(self._ctrl.doc, current_nets, before, normalized)
+
         self._ctrl.doc.doCommand(cmd)
-        
-        # Update handles and emit update
-        self.update_handles()
+        self._drag = None
+        rebound = self._rebind(edited_endpoints)
+        if not rebound:
+            # Normalization may remove or merge the edited segment. There is
+            # no unambiguous object to keep selected in that case.
+            self.sigDone.emit()
+        _trace("commit complete editor={:x} rebound={} graph={}".format(
+            id(self), rebound, _fmt_graph(self._ctrl.doc)))
         self.sigUpdate.emit()
-
-    def _normalize_single_move(self, cmd, old_pt1: QPoint, old_pt2: QPoint):
-        """Normalize after moving a single net (no junction drag)."""
-        # Get all current nets
-        all_nets = list(self._ctrl.doc.objects(objType=NetObj))
-        
-        # Remove the original net (it's being replaced)
-        all_nets = [n for n in all_nets if n != self._obj]
-        
-        # Add the new net position
-        all_nets.append(NetObj(self._obj.pt1, self._obj.pt2))
-        
-        # Use the new normalization method
-        normalized = NetObj.normalize_nets(self._ctrl.doc, all_nets)
-        
-        # Create undo commands for changes
-        for net in all_nets:
-            if net != self._obj:
-                # This net exists in the old state, will be replaced
-                sch.document.ObjDelCmd(net, doc=self._ctrl.doc, parent=cmd)
-        
-        for net in normalized:
-            sch.document.ObjAddCmd(net, doc=self._ctrl.doc, parent=cmd)
-
-    def _normalize_junction_drag(self, cmd, old_pt1: QPoint, old_pt2: QPoint,
-                                  connected_pt1: List[NetObj], connected_pt2: List[NetObj]):
-        """Normalize after dragging a junction (multiple connected nets)."""
-        # Get all current nets
-        all_nets = list(self._ctrl.doc.objects(objType=NetObj))
-        
-        # Collect all nets that were moved
-        moved_nets = set(connected_pt1) | set(connected_pt2)
-        
-        # Use the new normalization method
-        normalized = NetObj.normalize_nets(self._ctrl.doc, list(moved_nets))
-        
-        # Create undo commands for changes
-        for net in all_nets:
-            if net in moved_nets:
-                # This net is being replaced
-                sch.document.ObjDelCmd(net, doc=self._ctrl.doc, parent=cmd)
-        
-        for net in normalized:
-            sch.document.ObjAddCmd(net, doc=self._ctrl.doc, parent=cmd)

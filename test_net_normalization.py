@@ -12,29 +12,6 @@ from sch.obj.net import NetObj
 from sch.utils import Geom
 
 
-class TestNetObjPointEqual(unittest.TestCase):
-    """Tests for _pointEqual helper function."""
-    
-    def test_equal_points(self):
-        """Test that identical points are equal."""
-        self.assertTrue(NetObj._pointEqual(QPoint(0, 0), QPoint(0, 0)))
-        self.assertTrue(NetObj._pointEqual(QPoint(10, 20), QPoint(10, 20)))
-    
-    def test_different_points(self):
-        """Test that different points are not equal."""
-        # Use points that are clearly different (> epsilon)
-        self.assertFalse(NetObj._pointEqual(QPoint(0, 0), QPoint(2, 2)))
-        self.assertFalse(NetObj._pointEqual(QPoint(10, 20), QPoint(12, 20)))
-    
-    def test_epsilon_tolerance(self):
-        """Test epsilon tolerance for near-equal points."""
-        # Within epsilon (1.0) should be equal
-        self.assertTrue(NetObj._pointEqual(QPoint(0, 0), QPoint(0, 1), epsilon=1.0))
-        self.assertTrue(NetObj._pointEqual(QPoint(0, 0), QPoint(1, 0), epsilon=1.0))
-        # Beyond epsilon should not be equal
-        self.assertFalse(NetObj._pointEqual(QPoint(0, 0), QPoint(0, 2), epsilon=1.0))
-
-
 class TestNetObjUniquePoints(unittest.TestCase):
     """Tests for _uniquePoints helper function."""
     

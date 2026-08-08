@@ -84,7 +84,14 @@ class Controller(QObject):
 
     def snapPt(self, pt: QPoint):
         g = self.grid
-        return QPoint(int(round(float(pt.x())/g))*g, int(round(float(pt.y())/g))*g)
+
+        def snap_coord(value):
+            quotient, remainder = divmod(value, g)
+            if remainder * 2 >= g:
+                quotient += 1
+            return quotient * g
+
+        return QPoint(snap_coord(pt.x()), snap_coord(pt.y()))
 
     @property
     def toolId(self):
@@ -127,8 +134,18 @@ class Controller(QObject):
         class JunctionDrawable:
             @staticmethod
             def draw(painter):
-                sch.obj.net.NetObj.drawJunctions(self.doc, painter)
-        out = list(self.doc.objects())
+                preview = None
+                if self._tool is not None and hasattr(self._tool, 'previewObjects'):
+                    preview = self._tool.previewObjects()
+                if preview is None:
+                    sch.obj.net.NetObj.drawJunctions(self.doc, painter)
+                else:
+                    sch.obj.net.NetObj.drawJunctionsForNets(preview, painter)
+        hidden = ()
+        if self._tool is not None and hasattr(self._tool, 'hiddenObjects'):
+            hidden = tuple(self._tool.hiddenObjects())
+        out = [obj for obj in self.doc.objects()
+               if not any(obj is item for item in hidden)]
         out.append(JunctionDrawable())
         if self._tool is not None:
             out.append(self._tool)

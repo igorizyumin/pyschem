@@ -1,4 +1,5 @@
 import copy
+from pathlib import Path
 from typing import List
 from uuid import UUID, uuid4
 from PySide6.QtCore import *
@@ -76,12 +77,19 @@ class MasterDocument(QObject):
     def loadFromFile(self, file=None):
         if file is None:
             file = self.fileName
-        with open("xml/schschema.rng", "rb") as f:
+        if file is None:
+            raise ValueError("No document file was supplied")
+
+        schema_file = Path(__file__).resolve().parent.parent / "xml" / "schschema.rng"
+        with schema_file.open("rb") as f:
             rngdoc = etree.parse(f)
         rng = etree.RelaxNG(rngdoc)
         with open(file, "rb") as f:
             doc = etree.parse(f)
         rng.assertValid(doc)
+        self._symbols.clear()
+        self._pages.clear()
+        self.symProps.clear()
         root = doc.getroot()
         for child in root:
             if child.tag == "props":
@@ -181,7 +189,8 @@ class AbstractPage(QObject):
         return {obj for obj in self.objects(objType) if rect.intersects(obj.bbox())}
 
     def findObjsNear(self, pt: QPoint, dist=1, objType=None):
-        hitRect = QRect(pt.x()-dist/2, pt.y()-dist/2, dist, dist)
+        half_dist = dist // 2
+        hitRect = QRect(pt.x()-half_dist, pt.y()-half_dist, dist, dist)
         return {obj for obj in self.findObjsInRect(hitRect, objType) if obj.testHit(pt, dist)}
 
     def addObj(self, obj):
@@ -190,6 +199,28 @@ class AbstractPage(QObject):
 
     def removeObj(self, obj):
         self._objs.remove(obj)
+        self.sigChanged.emit()
+
+    def replaceObjects(self, remove, add, objType=None):
+        """Atomically replace objects and emit one document-change signal.
+
+        When ``objType`` is supplied, the operation replaces the complete
+        object graph of that exact type.  This supports commands whose
+        snapshots contain newly-created instances rather than the instances
+        currently held by the document.
+        """
+        remove = list(remove)
+        add = list(add)
+        if objType is None:
+            for obj in list(self._objs):
+                if any(obj is target for target in remove):
+                    self._objs.remove(obj)
+        else:
+            for obj in list(self._objs):
+                if type(obj) is objType:
+                    self._objs.remove(obj)
+        for obj in add:
+            self._objs.add(obj)
         self.sigChanged.emit()
 
     @Slot()

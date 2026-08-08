@@ -52,6 +52,16 @@ class SelectTool(QObject):
         for obj in self._selection:
             painter.drawRect(obj.bbox().marginsAdded(QMargins(500,500,500,500)))
 
+    def hiddenObjects(self):
+        if self._editor is not None and hasattr(self._editor, 'hiddenObjects'):
+            return self._editor.hiddenObjects()
+        return ()
+
+    def previewObjects(self):
+        if self._editor is not None and hasattr(self._editor, 'previewObjects'):
+            return self._editor.previewObjects()
+        return None
+
     def handleEvent(self, event: Event):
         if self._editor is not None:
             self._editor.handleEvent(event)
@@ -83,6 +93,8 @@ class SelectTool(QObject):
         self.selectionChanged()
 
     def selectionChanged(self, event=None):
+        if self._editor is not None:
+            self._editor.dispose()
         self._editor = None
         if len(self._selection) == 1 and type(self._selection[0]) is sch.obj.line.LineObj:
             self._editor = sch.tools.line.LineEditor(self._ctrl, self._selection[0])

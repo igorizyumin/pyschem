@@ -55,6 +55,7 @@ class BaseEditor(QObject):
         super().__init__()
         self._ctrl = ctrl
         self._obj = obj
+        self._disposed = False
         self._handles = []
         self._inspector = None
         self._cmd = None
@@ -156,12 +157,32 @@ class BaseEditor(QObject):
 
     def _docChanged(self):
         """Standard document change handling."""
+        if self._disposed:
+            return
         # Check that object is still part of the document
         if not self._ctrl.doc.hasObject(self._obj):
             self.sigDone.emit()
             return
         # Object still there, update handle positions
         self.update_handles()
+
+    def dispose(self):
+        """Disconnect this editor from document and UI signals."""
+        if self._disposed:
+            return
+        self._disposed = True
+        try:
+            self._ctrl.doc.sigChanged.disconnect(self._docChanged)
+        except (RuntimeError, TypeError):
+            pass
+        try:
+            self.sigUpdate.disconnect()
+        except (RuntimeError, TypeError):
+            pass
+        try:
+            self.sigDone.disconnect()
+        except (RuntimeError, TypeError):
+            pass
 
 
 class TextHandle(EditHandle):

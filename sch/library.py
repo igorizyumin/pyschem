@@ -1,5 +1,6 @@
 from PySide6.QtCore import *
 from sch.document import *
+import traceback
 
 
 class PartLibrary(QObject):
@@ -10,6 +11,7 @@ class PartLibrary(QObject):
         self._rebuildCache()
 
     def _rebuildCache(self):
+        self._docs.clear()
         # first, build a list of dirs to search
         def getDirs(path, prefix):
             d = QDir(path)
@@ -36,7 +38,8 @@ class PartLibrary(QObject):
                         doc.loadFromFile(fp)
                         self._docs[fp] = doc
                     except Exception as e:
-                        print("Exception loading {}: {}".format(f, str(e)))
+                        print("Exception loading {}: {}".format(fp, str(e)))
+                        traceback.print_exc()
 
     def getSymList(self):
         out = []

@@ -221,13 +221,26 @@ class PageTab(QWidget):
 
     @Slot(bool)
     def _onUndoChanged(self):
-        self.undoChanged.emit(self.canUndo(), self.canRedo())
+        # Qt may deliver a queued signal after the C++ QUndoStack has been
+        # deleted while a tab/document is being closed.
+        try:
+            can_undo = self.canUndo()
+            can_redo = self.canRedo()
+        except RuntimeError:
+            return
+        self.undoChanged.emit(can_undo, can_redo)
 
     def canUndo(self):
-        return self.doc.undoStack.canUndo()
+        try:
+            return self.doc.undoStack.canUndo()
+        except RuntimeError:
+            return False
 
     def canRedo(self):
-        return self.doc.undoStack.canRedo()
+        try:
+            return self.doc.undoStack.canRedo()
+        except RuntimeError:
+            return False
 
     def undo(self):
         self.doc.undo()
