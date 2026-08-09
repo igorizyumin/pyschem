@@ -40,6 +40,9 @@ class NetTool(QObject):
         self._ctrl = ctrl
         self._firstPt = None
         self._pos = QPoint()
+        self._modifiers = Qt.NoModifier
+        self._ignore_next_release = False
+        self._vertical_first = False
 
     @property
     def inspector(self):
@@ -51,34 +54,117 @@ class NetTool(QObject):
 
     def finish(self):
         self._firstPt = None
+        self._ignore_next_release = False
         self.sigUpdate.emit()
 
+    def _snap(self, pos):
+        return self._ctrl.snapPt(pos)
+
+    def _preview_points(self, pos=None, modifiers=None):
+        """Return the live one- or two-segment route from the chain start."""
+        if pos is None:
+            pos = self._pos
+        if modifiers is None:
+            modifiers = self._modifiers
+        pos = self._snap(pos)
+        if self._firstPt is None or pos == self._firstPt:
+            return []
+        if modifiers & Qt.ShiftModifier:
+            return [(QPoint(self._firstPt), pos)]
+        if pos.x() == self._firstPt.x() or pos.y() == self._firstPt.y():
+            return [(QPoint(self._firstPt), pos)]
+        if self._vertical_first:
+            bend = QPoint(self._firstPt.x(), pos.y())
+        else:
+            bend = QPoint(pos.x(), self._firstPt.y())
+        return [(QPoint(self._firstPt), bend), (bend, pos)]
+
+    def _toggle_polarity(self):
+        self._vertical_first = not self._vertical_first
+
+    def _endpoint(self, pos=None, modifiers=None):
+        """Return the final point of the current live route."""
+        points = self._preview_points(pos, modifiers)
+        fallback = pos if pos is not None else self._pos
+        return points[-1][1] if points else self._snap(fallback)
+
     def draw(self, painter):
-        pen = QPen(Layer.color(LayerType.wire))
+        # The live segment is a preview, so distinguish it from committed
+        # wires using the selection/yellow color.
+        pen = QPen(Layer.color(LayerType.selection))
         pen.setCapStyle(Qt.RoundCap)
         pen.setJoinStyle(Qt.RoundJoin)
         pen.setWidth(0)
         painter.setPen(pen)
         if self._firstPt is not None:
-            painter.drawLine(self._firstPt, self._pos)
+            for start, end in self._preview_points():
+                painter.drawLine(start, end)
 
     def handleEvent(self, e):
         if e.evType == sch.controller.Event.Type.MouseMoved:
-            self._pos = self._ctrl.snapPt(e.pos)
+            self._modifiers = e.modifiers
+            self._pos = self._snap(e.pos)
             if self._firstPt is not None:
                 self.sigUpdate.emit()
             e.handled = True
         elif e.evType == sch.controller.Event.Type.MouseReleased:
+            if self._ignore_next_release:
+                self._ignore_next_release = False
+                e.handled = True
+                return
+            self._modifiers = e.modifiers
+            self._pos = self._snap(e.pos)
             if self._firstPt is None:
                 self._firstPt = self._pos
             else:
-                if self._pos != self._firstPt:
-                    self.addNet(NetObj(self._firstPt, self._pos))
+                points = self._preview_points()
+                if not points:
                     self._firstPt = None
-                    self.sigUpdate.emit()
+                else:
+                    start, endpoint = points[0]
+                    new_net = NetObj(start, endpoint)
+                    existing_nets = list(self._ctrl.doc.objects(objType=NetObj))
+                    self.addNet(new_net)
+                    if any(net.touchesPt(endpoint) for net in existing_nets):
+                        # Reaching an existing wire completes the chain.  The
+                        # tool itself remains active for starting another one.
+                        self._firstPt = None
+                    else:
+                        # Commit only the first leg.  The remaining leg stays
+                        # live, and the next click starts with the opposite
+                        # polarity.
+                        self._firstPt = endpoint
+                    self._toggle_polarity()
+                self.sigUpdate.emit()
+            e.handled = True
+        elif e.evType == sch.controller.Event.Type.MouseDblClicked:
+            self._modifiers = e.modifiers
+            self._pos = self._snap(e.pos)
+            # A double-click finishes the complete live route, unlike a
+            # normal click which commits only its first L leg.
+            for start, end in self._preview_points():
+                if start != end:
+                    self.addNet(NetObj(start, end))
+            self._firstPt = None
+            # Qt normally sends a release after the double-click event.  Do
+            # not let that release start a fresh chain.
+            self._ignore_next_release = True
+            self.sigUpdate.emit()
+            e.handled = True
+        elif e.evType == sch.controller.Event.Type.KeyPressed and e.key == Qt.Key_Space:
+            self._toggle_polarity()
+            self.sigUpdate.emit()
+            e.handled = True
+        elif e.evType == sch.controller.Event.Type.Done:
+            # Finish the current chain but remain in the NetTool so another
+            # chain can be started with the next click.
+            self._firstPt = None
+            self._ignore_next_release = False
+            self.sigUpdate.emit()
             e.handled = True
         elif e.evType == sch.controller.Event.Type.Cancel:
             self._firstPt = None
+            self._ignore_next_release = False
             self.sigUpdate.emit()
             e.handled = True
 
@@ -134,17 +220,20 @@ class NetDragSession(DragController):
     In the default orthogonal mode, horizontal and vertical segments move
     along their own axes; short orthogonal connectors preserve connectivity
     when a junction moves in the other axis.  Free mode (used by Shift) moves
-    every attached endpoint by the complete cursor delta.  Interior crossings
-    are deliberately not treated as connections.
+    every attached endpoint by the complete cursor delta.  Alt disables
+    attached-endpoint movement entirely, making the selected wire independent
+    for the duration of the drag.  Interior crossings are deliberately not
+    treated as connections.
     """
 
     def __init__(self, nets, selected, handle_index=None, grab_point=None,
-                 orthogonal=True):
+                 orthogonal=True, maintain_connectivity=True):
         source = list(nets)
         self._selected_index = next(
             index for index, net in enumerate(source) if net is selected)
         selected_net = source[self._selected_index]
         self._orthogonal = bool(orthogonal)
+        self._maintain_connectivity = bool(maintain_connectivity)
         if handle_index is None:
             if grab_point is None:
                 raise ValueError("segment drags require a grab point")
@@ -158,10 +247,13 @@ class NetDragSession(DragController):
             self._mode = "endpoint"
             self._anchor = selected_net.pt1 if handle_index == 0 else selected_net.pt2
             self._moved_points = (QPoint(self._anchor),)
-        self._affected = tuple(
-            index for index, net in enumerate(source)
-            if any(net.pt1 == point or net.pt2 == point
-                   for point in self._moved_points))
+        if self._maintain_connectivity:
+            self._affected = tuple(
+                index for index, net in enumerate(source)
+                if any(net.pt1 == point or net.pt2 == point
+                       for point in self._moved_points))
+        else:
+            self._affected = (self._selected_index,)
         self._cursor = QPoint(self._anchor)
         self._effective_cursor = QPoint(self._anchor)
         self._preview_additions = ()
@@ -176,10 +268,12 @@ class NetDragSession(DragController):
         return tuple(result)
 
     @classmethod
-    def for_segment(cls, nets, selected, grab_point, orthogonal=True):
+    def for_segment(cls, nets, selected, grab_point, orthogonal=True,
+                    maintain_connectivity=True):
         """Create a session for grabbing the body of ``selected``."""
         return cls(nets, selected, grab_point=grab_point,
-                   orthogonal=orthogonal)
+                   orthogonal=orthogonal,
+                   maintain_connectivity=maintain_connectivity)
 
     @property
     def mode(self):
@@ -189,9 +283,24 @@ class NetDragSession(DragController):
     def orthogonal(self):
         return self._orthogonal
 
+    @property
+    def maintain_connectivity(self):
+        return self._maintain_connectivity
+
     def set_orthogonal(self, orthogonal):
         """Change drag constraint mode without changing the baseline graph."""
         self._orthogonal = bool(orthogonal)
+
+    def set_maintain_connectivity(self, maintain_connectivity):
+        """Change whether attached graph vertices follow the drag."""
+        self._maintain_connectivity = bool(maintain_connectivity)
+        if self._maintain_connectivity:
+            self._affected = tuple(
+                index for index, net in enumerate(self._source)
+                if any(net.pt1 == point or net.pt2 == point
+                       for point in self._moved_points))
+        else:
+            self._affected = (self._selected_index,)
 
     @property
     def moved_points(self):
@@ -256,7 +365,9 @@ class NetDragSession(DragController):
                 moved = moved_points.get((endpoint.x(), endpoint.y()))
                 if moved is None:
                     continue
-                if self._mode == "segment" and index == self._selected_index:
+                if index == self._selected_index and (
+                        self._mode == "segment" or
+                        not self._maintain_connectivity):
                     replacement = moved
                 else:
                     replacement = self._preserved_endpoint(net, endpoint, moved)
@@ -329,7 +440,7 @@ class NetEditor(BaseEditor):
     def _hit_radius(self):
         view = getattr(self._ctrl, "view", None)
         if view is not None and hasattr(view, "hitRadius"):
-            return view.hitRadius()
+            return NetObj.hitRadius(view.hitRadius())
         return 1
 
     def _snap(self, pos):
@@ -445,25 +556,37 @@ class NetEditor(BaseEditor):
             if net.pt1 != net.pt2:
                 painter.drawLine(net.pt1, net.pt2)
 
-    def _begin_drag(self, handle_index, pos, orthogonal=True):
+    def draw_handles(self, painter):
+        """Hide endpoint handles while the net body is being dragged."""
+        if self._drag is not None and self._drag.mode == "segment":
+            return
+        super().draw_handles(painter)
+
+    def _begin_drag(self, handle_index, pos, orthogonal=True,
+                    maintain_connectivity=True):
         if self._drag is None:
             self._drag = NetDragSession(
                 self._ctrl.doc.objects(objType=NetObj), self._obj, handle_index,
-                orthogonal=orthogonal)
+                orthogonal=orthogonal,
+                maintain_connectivity=maintain_connectivity)
         elif self._drag.mode == "endpoint":
             self._drag.set_orthogonal(orthogonal)
+            self._drag.set_maintain_connectivity(maintain_connectivity)
         self._drag.update(pos)
         self.update_handles()
 
-    def _begin_segment_drag(self, pos, orthogonal=True):
+    def _begin_segment_drag(self, pos, orthogonal=True,
+                            maintain_connectivity=True):
         """Start or update a drag that grabbed the body of the net."""
         snapped = self._snap(pos)
         if self._drag is None:
             self._drag = NetDragSession.for_segment(
                 self._ctrl.doc.objects(objType=NetObj), self._obj, snapped,
-                orthogonal=orthogonal)
+                orthogonal=orthogonal,
+                maintain_connectivity=maintain_connectivity)
         elif self._drag.mode == "segment":
             self._drag.set_orthogonal(orthogonal)
+            self._drag.set_maintain_connectivity(maintain_connectivity)
         self._drag.update(snapped)
         self.update_handles()
 
@@ -475,14 +598,18 @@ class NetEditor(BaseEditor):
     def _dragPt1(self, pos):
         """Handle dragging of pt1 - move connected segments."""
         orthogonal = not bool(self._handles[0].modifiers & Qt.ShiftModifier)
-        self._begin_drag(0, pos, orthogonal=orthogonal)
+        maintain_connectivity = not bool(self._handles[0].modifiers & Qt.AltModifier)
+        self._begin_drag(0, pos, orthogonal=orthogonal,
+                         maintain_connectivity=maintain_connectivity)
         self.sigUpdate.emit()
 
     @Slot('QPoint')
     def _dragPt2(self, pos):
         """Handle dragging of pt2 - move connected segments."""
         orthogonal = not bool(self._handles[1].modifiers & Qt.ShiftModifier)
-        self._begin_drag(1, pos, orthogonal=orthogonal)
+        maintain_connectivity = not bool(self._handles[1].modifiers & Qt.AltModifier)
+        self._begin_drag(1, pos, orthogonal=orthogonal,
+                         maintain_connectivity=maintain_connectivity)
         self.sigUpdate.emit()
 
     def handle_custom_event(self, event):
@@ -496,21 +623,30 @@ class NetEditor(BaseEditor):
                                 for handle in self._handles)
                     and self._obj.testHit(event.pos, self._hit_radius())):
                 orthogonal = not bool(event.modifiers & Qt.ShiftModifier)
-                self._begin_segment_drag(event.pos, orthogonal=orthogonal)
+                maintain_connectivity = not bool(event.modifiers & Qt.AltModifier)
+                self._begin_segment_drag(
+                    event.pos, orthogonal=orthogonal,
+                    maintain_connectivity=maintain_connectivity)
                 self.sigUpdate.emit()
                 event.handled = True
                 return
         elif event.evType == sch.controller.Event.Type.MouseMoved:
             if self._drag is not None and self._drag.mode == "segment":
                 orthogonal = not bool(event.modifiers & Qt.ShiftModifier)
-                self._begin_segment_drag(event.pos, orthogonal=orthogonal)
+                maintain_connectivity = not bool(event.modifiers & Qt.AltModifier)
+                self._begin_segment_drag(
+                    event.pos, orthogonal=orthogonal,
+                    maintain_connectivity=maintain_connectivity)
                 self.sigUpdate.emit()
                 event.handled = True
                 return
         elif event.evType == sch.controller.Event.Type.MouseReleased:
             if self._drag is not None and self._drag.mode == "segment":
                 orthogonal = not bool(event.modifiers & Qt.ShiftModifier)
-                self._begin_segment_drag(event.pos, orthogonal=orthogonal)
+                maintain_connectivity = not bool(event.modifiers & Qt.AltModifier)
+                self._begin_segment_drag(
+                    event.pos, orthogonal=orthogonal,
+                    maintain_connectivity=maintain_connectivity)
                 moved = self._drag.moved
                 if moved:
                     self._commit()

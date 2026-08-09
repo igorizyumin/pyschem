@@ -426,6 +426,17 @@ class GroupEditor(QObject):
                 self._commit()
                 event.handled = True
                 return
+            if not self._drag_moved:
+                # A click inside a mixed group is not an edit.  In
+                # particular, the non-net drag controller only previews the
+                # non-net members, so committing it without movement would
+                # replace and accidentally delete the selected net members.
+                self._net_source = None
+                self._net_selected_ids = set()
+                self._drag_controller = None
+                self._before = None
+                event.handled = True
+                return
             if self._drag_controller is not None:
                 preview = self._drag_controller.preview
                 self._ctrl.doc.doCommand(DragCommand(

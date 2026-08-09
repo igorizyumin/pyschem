@@ -11,10 +11,18 @@ from sch.document import MasterDocument
 from sch.document import DocPage
 from sch.obj.net import NetObj
 from sch.tools.net import NetDragSession, NetEditor, NetTool
+from sch.utils import Layer, LayerType
 from sch.view import Event
 
 
 class TestNetRegression(unittest.TestCase):
+    def test_find_objs_near_uses_the_full_hit_radius_for_thin_nets(self):
+        page = DocPage(MasterDocument(None))
+        net = NetObj(QPoint(0, 0), QPoint(100, 0))
+        page.addObj(net)
+
+        self.assertIn(net, page.findObjsNear(QPoint(50, 8), dist=10))
+
     def test_net_tool_add_uses_integer_graph_normalization(self):
         class Controller:
             pass
@@ -27,6 +35,176 @@ class TestNetRegression(unittest.TestCase):
         result = next(iter(page.objects(NetObj)))
         self.assertEqual(result.pt1, QPoint(0, 0))
         self.assertEqual(result.pt2, QPoint(10, 0))
+
+    def test_net_tool_continues_an_orthogonal_chain_until_enter(self):
+        class Controller:
+            def __init__(self, page):
+                self.doc = page
+
+            @staticmethod
+            def snapPt(point):
+                return QPoint(point)
+
+        page = DocPage(MasterDocument(None))
+        tool = NetTool(Controller(page))
+        tool.handleEvent(Event(Event.Type.MouseReleased, QPoint(0, 0)))
+        tool.handleEvent(Event(Event.Type.MouseMoved, QPoint(10, 4)))
+
+        self.assertEqual(tool._endpoint(), QPoint(10, 4))
+        self.assertEqual(tool._preview_points(), [
+            (QPoint(0, 0), QPoint(10, 0)),
+            (QPoint(10, 0), QPoint(10, 4)),
+        ])
+        tool.handleEvent(Event(Event.Type.MouseReleased, QPoint(10, 4)))
+        self.assertEqual(tool._firstPt, QPoint(10, 0))
+        self.assertTrue(tool._vertical_first)
+
+        tool.handleEvent(Event(Event.Type.MouseReleased, QPoint(10, 10)))
+        self.assertEqual(tool._firstPt, QPoint(10, 10))
+        self.assertFalse(tool._vertical_first)
+        self.assertIn(NetObj(QPoint(0, 0), QPoint(10, 0)),
+                      page.objects(NetObj))
+        self.assertIn(NetObj(QPoint(10, 0), QPoint(10, 10)),
+                      page.objects(NetObj))
+
+        tool.handleEvent(Event(Event.Type.Done))
+        self.assertIsNone(tool._firstPt)
+        self.assertEqual(len(page.objects(NetObj)), 2)
+
+    def test_net_tool_shift_allows_an_angled_chain_segment(self):
+        class Controller:
+            def __init__(self, page):
+                self.doc = page
+
+            @staticmethod
+            def snapPt(point):
+                return QPoint(point)
+
+        page = DocPage(MasterDocument(None))
+        tool = NetTool(Controller(page))
+        shift = Qt.ShiftModifier
+        tool.handleEvent(Event(Event.Type.MouseReleased, QPoint(0, 0)))
+        tool.handleEvent(Event(Event.Type.MouseReleased, QPoint(10, 4),
+                               modifiers=shift))
+
+        self.assertEqual(tool._firstPt, QPoint(10, 4))
+        self.assertIn(NetObj(QPoint(0, 0), QPoint(10, 4)),
+                      page.objects(NetObj))
+
+    def test_net_tool_ends_a_chain_when_the_new_endpoint_touches_a_wire(self):
+        class Controller:
+            def __init__(self, page):
+                self.doc = page
+
+            @staticmethod
+            def snapPt(point):
+                return QPoint(point)
+
+        page = DocPage(MasterDocument(None))
+        existing = NetObj(QPoint(10, 0), QPoint(10, 10))
+        page.addObj(existing)
+        tool = NetTool(Controller(page))
+        tool.handleEvent(Event(Event.Type.MouseReleased, QPoint(0, 0)))
+        tool.handleEvent(Event(Event.Type.MouseReleased, QPoint(10, 0)))
+
+        self.assertIsNone(tool._firstPt)
+        self.assertIn(existing, page.objects(NetObj))
+        self.assertIn(NetObj(QPoint(0, 0), QPoint(10, 0)),
+                      page.objects(NetObj))
+
+    def test_net_tool_preview_is_drawn_in_yellow(self):
+        class Controller:
+            def __init__(self, page):
+                self.doc = page
+
+            @staticmethod
+            def snapPt(point):
+                return QPoint(point)
+
+        class PainterSpy:
+            def __init__(self):
+                self.pen = None
+                self.lines = []
+
+            def setPen(self, pen):
+                self.pen = pen
+
+            def drawLine(self, start, end):
+                self.lines.append((start, end))
+
+        page = DocPage(MasterDocument(None))
+        tool = NetTool(Controller(page))
+        tool.handleEvent(Event(Event.Type.MouseReleased, QPoint(0, 0)))
+        tool.handleEvent(Event(Event.Type.MouseMoved, QPoint(10, 5)))
+        painter = PainterSpy()
+        tool.draw(painter)
+
+        self.assertEqual(painter.pen.color(), Layer.color(LayerType.selection))
+        self.assertEqual(painter.lines, [
+            (QPoint(0, 0), QPoint(10, 0)),
+            (QPoint(10, 0), QPoint(10, 5)),
+        ])
+
+    def test_net_tool_space_toggles_l_order(self):
+        class Controller:
+            def __init__(self, page):
+                self.doc = page
+
+            @staticmethod
+            def snapPt(point):
+                return QPoint(point)
+
+        page = DocPage(MasterDocument(None))
+        tool = NetTool(Controller(page))
+        tool.handleEvent(Event(Event.Type.MouseReleased, QPoint(0, 0)))
+        tool.handleEvent(Event(Event.Type.KeyPressed, key=Qt.Key_Space))
+        tool.handleEvent(Event(Event.Type.MouseMoved, QPoint(10, 5)))
+
+        self.assertEqual(tool._preview_points(), [
+            (QPoint(0, 0), QPoint(0, 5)),
+            (QPoint(0, 5), QPoint(10, 5)),
+        ])
+
+    def test_net_tool_zero_length_segment_terminates_the_chain(self):
+        class Controller:
+            def __init__(self, page):
+                self.doc = page
+
+            @staticmethod
+            def snapPt(point):
+                return QPoint(point)
+
+        page = DocPage(MasterDocument(None))
+        tool = NetTool(Controller(page))
+        tool.handleEvent(Event(Event.Type.MouseReleased, QPoint(0, 0)))
+        tool.handleEvent(Event(Event.Type.MouseReleased, QPoint(10, 0)))
+        self.assertEqual(tool._firstPt, QPoint(10, 0))
+
+        tool.handleEvent(Event(Event.Type.MouseReleased, QPoint(10, 0)))
+
+        self.assertIsNone(tool._firstPt)
+        self.assertEqual(len(page.objects(NetObj)), 1)
+
+    def test_net_tool_double_click_terminates_without_starting_a_new_chain(self):
+        class Controller:
+            def __init__(self, page):
+                self.doc = page
+
+            @staticmethod
+            def snapPt(point):
+                return QPoint(point)
+
+        page = DocPage(MasterDocument(None))
+        tool = NetTool(Controller(page))
+        tool.handleEvent(Event(Event.Type.MouseReleased, QPoint(0, 0)))
+        tool.handleEvent(Event(Event.Type.MouseDblClicked, QPoint(10, 10)))
+        tool.handleEvent(Event(Event.Type.MouseReleased, QPoint(10, 10)))
+
+        self.assertIsNone(tool._firstPt)
+        self.assertIn(NetObj(QPoint(0, 0), QPoint(10, 0)),
+                      page.objects(NetObj))
+        self.assertIn(NetObj(QPoint(10, 0), QPoint(10, 10)),
+                      page.objects(NetObj))
 
     def test_net_is_immutable_and_hashable_by_value(self):
         net = NetObj(QPoint(0, 0), QPoint(10, 0))
@@ -345,6 +523,34 @@ class TestNetSegmentDrag(unittest.TestCase):
         self.assertEqual(self._coords(session.preview[1]), (5, 5, 0, 10))
         self.assertEqual(session.preview_additions, [])
 
+    def test_alt_segment_drag_moves_only_the_selected_wire(self):
+        selected = NetObj(QPoint(0, 0), QPoint(10, 0))
+        attached = NetObj(QPoint(10, 0), QPoint(20, 0))
+        stem = NetObj(QPoint(10, 0), QPoint(10, -10))
+        session = NetDragSession.for_segment(
+            [selected, attached, stem], selected, QPoint(5, 0),
+            maintain_connectivity=False)
+
+        session.update(QPoint(5, 5))
+
+        self.assertEqual(self._coords(session.preview[0]), (0, 5, 10, 5))
+        self.assertEqual(self._coords(session.preview[1]), (10, 0, 20, 0))
+        self.assertEqual(self._coords(session.preview[2]), (10, 0, 10, -10))
+        self.assertEqual(session.preview_additions, [])
+
+    def test_alt_vertex_drag_moves_only_the_selected_wire_endpoint(self):
+        selected = NetObj(QPoint(0, 0), QPoint(10, 0))
+        attached = NetObj(QPoint(0, 0), QPoint(0, 10))
+        session = NetDragSession(
+            [selected, attached], selected, handle_index=0,
+            maintain_connectivity=False)
+
+        session.update(QPoint(5, 5))
+
+        self.assertEqual(self._coords(session.preview[0]), (5, 5, 10, 0))
+        self.assertEqual(self._coords(session.preview[1]), (0, 0, 0, 10))
+        self.assertEqual(session.preview_additions, [])
+
     def test_segment_drag_stretches_wires_at_both_endpoints(self):
         left = NetObj(QPoint(-5, 0), QPoint(0, 0))
         selected = NetObj(QPoint(0, 0), QPoint(10, 0))
@@ -539,6 +745,40 @@ class TestNetSegmentDrag(unittest.TestCase):
         self.assertEqual(editor._drag.preview_additions, [])
         editor.handleEvent(Event(Event.Type.MouseReleased, QPoint(5, 5),
                                  modifiers=shift))
+        editor.dispose()
+
+    def test_body_drag_suppresses_endpoint_handles(self):
+        class View:
+            @staticmethod
+            def hitRadius():
+                return 1
+
+        class Controller:
+            def __init__(self, page):
+                self.doc = page
+                self.view = View()
+
+            @staticmethod
+            def snapPt(point):
+                return QPoint(point)
+
+        class PainterSpy:
+            def __init__(self):
+                self.rects = 0
+
+            def drawRect(self, *args):
+                self.rects += 1
+
+        page = DocPage(MasterDocument(None))
+        net = NetObj(QPoint(0, 0), QPoint(10, 0))
+        page.addObj(net)
+        editor = NetEditor(Controller(page), net)
+        editor._begin_segment_drag(QPoint(5, 0))
+
+        spy = PainterSpy()
+        editor.draw_handles(spy)
+
+        self.assertEqual(spy.rects, 0)
         editor.dispose()
 
     def test_same_grid_body_click_does_not_create_an_undo_command(self):

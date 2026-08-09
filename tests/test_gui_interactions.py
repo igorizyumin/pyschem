@@ -96,6 +96,40 @@ class TestGuiInteractions(unittest.TestCase):
                          [QPoint(5000, 0), QPoint(5000, 10000)])
         self.assertEqual(len(gui.tool._selection), 2)
 
+    def test_net_body_drag_does_not_leave_a_pending_rectangle_selection(self):
+        net = NetObj(QPoint(0, 0), QPoint(5000, 0))
+        gui = GuiHarness([net])
+
+        # The first press selects the net and is then handed to its editor
+        # for a body drag.  The SelectTool must not retain that press as the
+        # start of a later rubberband gesture.
+        gui.press(QPoint(2500, 0))
+        gui.move(QPoint(2500, 5000))
+        gui.release(QPoint(2500, 5000))
+
+        self.assertIsNone(gui.tool._rubber_start)
+        self.assertIsNone(gui.tool._rubber_rect)
+
+        # A pointer move after release must not create a rectangle without a
+        # new mouse press.
+        gui.move(QPoint(10000, 10000))
+        self.assertIsNone(gui.tool._rubber_start)
+        self.assertIsNone(gui.tool._rubber_rect)
+        gui.tool._editor.dispose()
+
+    def test_net_body_hitbox_is_slightly_larger_than_the_base_pointer_tolerance(self):
+        net = NetObj(QPoint(0, 0), QPoint(5000, 0))
+        gui = GuiHarness([net], grid=1000)
+
+        # At the default view scale this is outside the base six-pixel hit
+        # radius, but inside the modest net-specific tolerance.
+        gui.press(QPoint(2500, 2000))
+
+        self.assertEqual(gui.tool._selection, [net])
+        self.assertIsNotNone(gui.tool._editor)
+        gui.release(QPoint(2500, 2000))
+        gui.tool._editor.dispose()
+
     def test_clicking_outside_group_deselects_it(self):
         first = LineObj(QPoint(0, 0), QPoint(5000, 0))
         second = LineObj(QPoint(0, 10000), QPoint(5000, 10000))
@@ -183,6 +217,21 @@ class TestGuiInteractions(unittest.TestCase):
                          QPoint(5000, 0))
         self.assertEqual(next(iter(gui.page.objects(TextObj))).pos,
                          QPoint(5000, 10000))
+
+    def test_clicking_a_mixed_net_text_group_does_not_delete_the_net(self):
+        net = NetObj(QPoint(0, 0), QPoint(5000, 0))
+        text = TextObj("Label", QPoint(0, 10000))
+        gui = GuiHarness([net, text])
+        gui.tool._selection = [net, text]
+        gui.tool.selectionChanged()
+
+        gui.press(QPoint(2500, 0))
+        gui.release(QPoint(2500, 0))
+
+        self.assertIn(net, gui.page.objects(NetObj))
+        self.assertIn(text, gui.page.objects(TextObj))
+        self.assertEqual(set(gui.tool._selection), {net, text})
+        gui.tool._editor.dispose()
 
     def test_group_net_edit_keeps_unselected_nets_out_of_group(self):
         first = NetObj(QPoint(0, 0), QPoint(5000, 0))

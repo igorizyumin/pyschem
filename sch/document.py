@@ -1,4 +1,5 @@
 import copy
+import math
 from pathlib import Path
 from typing import List
 from uuid import UUID, uuid4
@@ -225,8 +226,12 @@ class AbstractPage(QObject):
         return {obj for obj in self.objects(objType) if rect.intersects(obj.bbox())}
 
     def findObjsNear(self, pt: QPoint, dist=1, objType=None):
-        half_dist = dist // 2
-        hitRect = QRect(pt.x()-half_dist, pt.y()-half_dist, dist, dist)
+        # ``dist`` is the hit radius used by the object's precise test.  The
+        # coarse rectangle must cover that entire radius; using ``dist`` as
+        # the rectangle width previously reduced the effective hitbox by half
+        # for thin objects such as wires.
+        dist = int(math.ceil(dist))
+        hitRect = QRect(pt.x()-dist, pt.y()-dist, 2*dist+1, 2*dist+1)
         return {obj for obj in self.findObjsInRect(hitRect, objType) if obj.testHit(pt, dist)}
 
     def addObj(self, obj):

@@ -7,6 +7,7 @@ from typing import List, Set, Tuple
 
 class NetObj(object):
     __slots__ = ('_pt1', '_pt2')
+    HIT_RADIUS_SCALE = 1.5
 
     def __init__(self, pt1=QPoint(0, 0), pt2=QPoint(1, 1)):
         object.__setattr__(self, '_pt1', QPoint(pt1))
@@ -62,6 +63,11 @@ class NetObj(object):
 
     def testHit(self, pt: QPoint, radius: int):
         return Geom.distPtToSegment(pt, self.pt1, self.pt2) <= radius
+
+    @staticmethod
+    def hitRadius(radius):
+        """Return the slightly forgiving body-hit radius for a wire."""
+        return radius * NetObj.HIT_RADIUS_SCALE
 
     def connVtx(self, otherNet):
         # check if they share a vertex

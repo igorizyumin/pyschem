@@ -75,10 +75,19 @@ class SelectTool(QObject):
             return self._editor.previewDrawables()
         return ()
 
+    def _clearRubberband(self):
+        """Drop selection-rectangle state when an editor owns the gesture."""
+        self._rubber_start = None
+        self._rubber_rect = None
+
     def handleEvent(self, event: Event):
         if self._editor is not None:
             self._editor.handleEvent(event)
             if event.handled:
+                if event.evType in (Event.Type.MousePressed,
+                                    Event.Type.MouseMoved,
+                                    Event.Type.MouseReleased):
+                    self._clearRubberband()
                 return
         if event.evType == Event.Type.MousePressed:
             # A group owns the complete selection envelope.  Handle this
@@ -93,7 +102,15 @@ class SelectTool(QObject):
                     return
             self._rubber_start = event.pos
             self._rubber_rect = None
-            objs = list(self._ctrl.doc.findObjsNear(event.pos, self._ctrl.view.hitRadius()))
+            hit_radius = self._ctrl.view.hitRadius()
+            objs = list(self._ctrl.doc.findObjsNear(event.pos, hit_radius))
+            # Wires are hairlines and are commonly grabbed by their body.
+            # Give them the same modest extra tolerance used by NetEditor.
+            for net in self._ctrl.doc.findObjsNear(
+                    event.pos, sch.obj.net.NetObj.hitRadius(hit_radius),
+                    objType=sch.obj.net.NetObj):
+                if net not in objs:
+                    objs.append(net)
             if len(objs) > 0:
                 # cycle through objects under cursor
                 if event.modifiers & Qt.ControlModifier:
@@ -181,3 +198,5 @@ class SelectTool(QObject):
         self._ctrl.sigInspectorChanged.emit()
         if event and self._editor is not None:
             self._editor.handleEvent(event)
+            if event.handled:
+                self._clearRubberband()

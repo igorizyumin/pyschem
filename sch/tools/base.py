@@ -115,11 +115,15 @@ class BaseEditor(QObject):
         painter.setBrush(Qt.NoBrush)
         
         # Draw handles
-        for h in self._handles:
-            h.draw(painter)
-        
+        self.draw_handles(painter)
+
         # Draw custom selection UI
         self.draw_custom(painter)
+
+    def draw_handles(self, painter):
+        """Draw edit handles; specialized editors may temporarily suppress them."""
+        for h in self._handles:
+            h.draw(painter)
 
     def draw_custom(self, painter):
         """Draw object-specific selection UI. Override in subclasses."""
