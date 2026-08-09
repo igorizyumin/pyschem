@@ -150,6 +150,7 @@ class PartEditor(BaseEditor):
         self._wire_preview = None
         self._pin_positions = None
         self._last_drag_cursor = None
+        self._drag_steps = []
         super().__init__(ctrl, obj)
         self._inspector = PartInspector(ctrl, obj)
         self._inspector.edited.connect(self._commit)
@@ -199,16 +200,24 @@ class PartEditor(BaseEditor):
 
     def _build_orthogonal_wire_preview(self, delta):
         """Move the pin-connected wire graph without routing detours."""
-        source = self._working_wire_source
+        source = self._wire_source
         pin_moves = {
             self._point_key(old): old + delta
             for old in self._pin_positions
         }
+
+        def body_shift(net):
+            shift = QPoint()
+            for step in self._drag_steps:
+                if self._perpendicular_move(net, step):
+                    shift += step
+            return shift
+
         body_indices = {
             index for index, net in enumerate(source)
             if any(self._point_key(endpoint) in pin_moves
                    for endpoint in (net.pt1, net.pt2))
-            and self._perpendicular_move(net, delta)
+            and body_shift(net) != QPoint()
         }
 
         point_moves = dict(pin_moves)
@@ -218,16 +227,21 @@ class PartEditor(BaseEditor):
 
         for index in body_indices:
             net = source[index]
-            preview[index] = net.translated(delta)
-            processed.add(index)
+            shift = body_shift(net)
+            endpoints = []
             for endpoint in (net.pt1, net.pt2):
                 key = self._point_key(endpoint)
-                point_moves[key] = endpoint + delta
-                pending.append((key, point_moves[key]))
+                moved = point_moves.get(key)
+                if moved is None:
+                    moved = endpoint + shift
+                    point_moves[key] = moved
+                    pending.append((key, moved))
+                endpoints.append(moved)
+            preview[index] = NetObj(*endpoints)
+            processed.add(index)
 
         while pending:
             old_key, _ = pending.pop(0)
-            moved = point_moves[old_key]
             for index, net in enumerate(source):
                 if index in processed:
                     continue
@@ -268,15 +282,13 @@ class PartEditor(BaseEditor):
                 preview[index] = NetObj(net.pt1, net.pt2)
         points = (self._ctrl.doc.connection_points()
                   if hasattr(self._ctrl.doc, "connection_points") else None)
-        return NetObj._normalizeGeometry(
-            [net for net in preview if net is not None], points)
+        return [net for net in preview if net is not None]
 
     def _build_wire_preview(self, delta, orthogonal, maintain_connectivity):
         if self._working_wire_source is None:
             return None
         if not maintain_connectivity:
-            return [NetObj(net.pt1, net.pt2)
-                    for net in self._working_wire_source]
+            return [NetObj(net.pt1, net.pt2) for net in self._wire_source]
         if orthogonal:
             return self._build_orthogonal_wire_preview(delta)
 
@@ -286,7 +298,7 @@ class PartEditor(BaseEditor):
         body_indices = set()
         body_points = {}
         if orthogonal:
-            for index, net in enumerate(self._working_wire_source):
+            for index, net in enumerate(self._wire_source):
                 attached = any(self._point_key(endpoint) in moved_pin_points
                                for endpoint in (net.pt1, net.pt2))
                 if attached and self._perpendicular_move(net, delta):
@@ -302,7 +314,7 @@ class PartEditor(BaseEditor):
         preview = []
         additions = []
         addition_keys = set()
-        for index, net in enumerate(self._working_wire_source):
+        for index, net in enumerate(self._wire_source):
             if index in body_indices:
                 preview.append(net.translated(delta))
                 continue
@@ -332,23 +344,20 @@ class PartEditor(BaseEditor):
                     pt2 = replacement
             preview.append(NetObj(pt1, pt2))
 
-        points = (self._ctrl.doc.connection_points()
-                  if hasattr(self._ctrl.doc, "connection_points") else None)
-        return NetObj._normalizeGeometry(preview + additions, points)
+        return preview + additions
 
     def _update_drag_preview(self, cursor, modifiers):
         new_pos = self._ctrl.snapPt(self._grabOffset + cursor)
         self._obj.pos = new_pos
-        delta = (new_pos - self._startPos if self._last_drag_cursor is None
-                 else new_pos - self._last_drag_cursor)
+        delta = new_pos - self._startPos
+        step = (new_pos - self._startPos if self._last_drag_cursor is None
+                else new_pos - self._last_drag_cursor)
+        if step != QPoint():
+            self._drag_steps.append(QPoint(step))
         self._wire_preview = self._build_wire_preview(
             delta,
             orthogonal=not bool(modifiers & Qt.ShiftModifier),
             maintain_connectivity=not bool(modifiers & Qt.AltModifier))
-        self._working_wire_source = [NetObj(net.pt1, net.pt2)
-                                     for net in self._wire_preview]
-        self._pin_positions = [position + delta
-                               for position in self._pin_positions]
         self._last_drag_cursor = QPoint(new_pos)
 
     def _begin_drag(self, event):
@@ -362,6 +371,7 @@ class PartEditor(BaseEditor):
         self._pin_positions = [position for _, position in self._obj.pin_positions()]
         self._wire_preview = [NetObj(net.pt1, net.pt2) for net in self._wire_source]
         self._last_drag_cursor = None
+        self._drag_steps = []
 
     def _cancel_drag(self):
         if self._drag_before is not None:
@@ -374,11 +384,14 @@ class PartEditor(BaseEditor):
         self._wire_preview = None
         self._pin_positions = None
         self._last_drag_cursor = None
+        self._drag_steps = []
 
     def _commit_drag(self):
         after = copy.copy(self._obj.__dict__)
         before_nets = [NetObj(net.pt1, net.pt2) for net in self._wire_source]
-        after_nets = [NetObj(net.pt1, net.pt2) for net in self._wire_preview]
+        points = (self._ctrl.doc.connection_points()
+                  if hasattr(self._ctrl.doc, "connection_points") else None)
+        after_nets = NetObj._normalizeGeometry(self._wire_preview, points)
         self._ctrl.doc.doCommand(PartDragCmd(
             self._ctrl.doc, self._obj, self._drag_before, after,
             before_nets, after_nets))
@@ -389,6 +402,7 @@ class PartEditor(BaseEditor):
         self._wire_preview = None
         self._pin_positions = None
         self._last_drag_cursor = None
+        self._drag_steps = []
 
     def handle_custom_event(self, event):
         """Handle mouse dragging and keyboard events."""

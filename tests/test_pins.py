@@ -235,6 +235,50 @@ class TestPins(unittest.TestCase):
         })
         editor.dispose()
 
+    def test_dragging_part_keeps_a_jog_break_until_release(self):
+        page, part = self._page_with_part()
+        page.addObj(NetObj(QPoint(5, 0), QPoint(15, 0)))
+        page.addObj(NetObj(QPoint(15, 0), QPoint(15, 10)))
+        page.addObj(NetObj(QPoint(15, 10), QPoint(25, 10)))
+
+        class Controller:
+            def __init__(self, page, library):
+                self.doc = page
+                self.lib = library
+
+            @staticmethod
+            def snapPt(point):
+                return QPoint(point)
+
+        editor = PartEditor(Controller(page, part._lib), part)
+        editor.handleEvent(Event(Event.Type.MousePressed, QPoint(5, 0)))
+        editor.handleEvent(Event(Event.Type.MouseMoved, QPoint(5, 5)))
+        self.assertEqual(len(editor.previewObjects()), 3)
+        editor.handleEvent(Event(Event.Type.MouseMoved, QPoint(5, 10)))
+
+        preview = editor.previewObjects()
+        self.assertIn(NetObj(QPoint(5, 10), QPoint(15, 10)), preview)
+        self.assertIn(NetObj(QPoint(15, 10), QPoint(25, 10)), preview)
+        self.assertNotIn(NetObj(QPoint(5, 10), QPoint(25, 10)), preview)
+
+        editor.handleEvent(Event(Event.Type.MouseMoved, QPoint(5, 15)))
+        self.assertIn(NetObj(QPoint(5, 15), QPoint(15, 15)),
+                      editor.previewObjects())
+        self.assertIn(NetObj(QPoint(15, 15), QPoint(15, 10)),
+                      editor.previewObjects())
+        self.assertIn(NetObj(QPoint(15, 10), QPoint(25, 10)),
+                      editor.previewObjects())
+
+        editor.handleEvent(Event(Event.Type.MouseReleased, QPoint(5, 15)))
+        self.assertIn(NetObj(QPoint(5, 15), QPoint(15, 15)),
+                      page.objects(NetObj))
+        self.assertTrue(any(
+            {net.pt1, net.pt2} == {QPoint(15, 15), QPoint(15, 10)}
+            for net in page.objects(NetObj)))
+        self.assertIn(NetObj(QPoint(15, 10), QPoint(25, 10)),
+                      page.objects(NetObj))
+        editor.dispose()
+
     def test_dragging_part_perpendicular_then_parallel_stretches_wire(self):
         page, part, editor = self._part_editor()
         editor.handleEvent(Event(Event.Type.MousePressed, QPoint(5, 0)))

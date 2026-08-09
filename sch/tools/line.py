@@ -63,6 +63,9 @@ class LineTool(QObject):
 class LineEditor(BaseEditor):
 
     def __init__(self, ctrl, obj):
+        self._body_dragging = False
+        self._body_drag_start = None
+        self._body_drag_before = None
         super().__init__(ctrl, obj)
 
     def create_handles(self):
@@ -85,6 +88,50 @@ class LineEditor(BaseEditor):
         """Draw the line itself."""
         painter.drawLine(self._obj.pt1, self._obj.pt2)
 
+    def draw_handles(self, painter):
+        """Hide endpoint handles while the line body is being dragged."""
+        if self._body_dragging:
+            return
+        super().draw_handles(painter)
+
+    def _hit_radius(self):
+        view = getattr(self._ctrl, "view", None)
+        if view is not None and hasattr(view, "hitRadius"):
+            return view.hitRadius()
+        return 1
+
+    def _snap(self, pos):
+        snap = getattr(self._ctrl, "snapPt", None)
+        return QPoint(snap(pos) if snap is not None else pos)
+
+    def _begin_body_drag(self, pos):
+        self._body_dragging = True
+        self._body_drag_start = self._snap(pos)
+        self._body_drag_before = (QPoint(self._obj.pt1), QPoint(self._obj.pt2))
+
+    def _update_body_drag(self, pos):
+        delta = self._snap(pos) - self._body_drag_start
+        self._obj.pt1 = self._body_drag_before[0] + delta
+        self._obj.pt2 = self._body_drag_before[1] + delta
+        self.update_handles()
+        self.sigUpdate.emit()
+
+    def _finish_body_drag(self, commit):
+        before = self._body_drag_before
+        moved = (before is not None and
+                 (self._obj.pt1 != before[0] or self._obj.pt2 != before[1]))
+        self._body_dragging = False
+        self._body_drag_start = None
+        self._body_drag_before = None
+        if commit and moved:
+            self._commit()
+        else:
+            if not commit and before is not None:
+                self._obj.pt1 = before[0]
+                self._obj.pt2 = before[1]
+            self.update_handles()
+            self.sigUpdate.emit()
+
     @Slot('QPoint')
     def _dragPt1(self, pos):
         self._obj.pt1 = pos
@@ -100,3 +147,30 @@ class LineEditor(BaseEditor):
         self._obj.pt1 = self._handles[0].pos
         self._obj.pt2 = self._handles[1].pos
         super()._commit()
+
+    def handle_custom_event(self, event):
+        if event.evType == Event.Type.MousePressed:
+            # Endpoint handles get first refusal in BaseEditor.handleEvent.
+            # A body drag therefore starts only when the click is on the line
+            # itself and away from both endpoint handles.
+            if (event.pos is not None
+                    and not any(handle.testHit(event.pos)
+                                for handle in self._handles)
+                    and self._obj.testHit(event.pos, self._hit_radius())):
+                self._begin_body_drag(event.pos)
+                event.handled = True
+                return
+        elif event.evType == Event.Type.MouseMoved and self._body_dragging:
+            self._update_body_drag(event.pos)
+            event.handled = True
+            return
+        elif event.evType == Event.Type.MouseReleased and self._body_dragging:
+            self._update_body_drag(event.pos)
+            self._finish_body_drag(commit=True)
+            event.handled = True
+            return
+        elif event.evType == Event.Type.Cancel and self._body_dragging:
+            self._finish_body_drag(commit=False)
+            event.handled = True
+            return
+        super().handle_custom_event(event)

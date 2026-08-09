@@ -12,6 +12,7 @@ from sch.obj.line import LineObj
 from sch.obj.net import NetObj
 from sch.obj.text import TextObj
 from sch.obj.part import PartObj
+from sch.obj.pin import PinObj
 from sch.obj.proptext import PropTextObj
 from sch.obj.sheetref import SheetRefObj
 from sch.tools.drag import DragController, DragCommand
@@ -133,6 +134,10 @@ class GroupEditor(QObject):
         self._net_preview = None
         self._net_selected_preview = None
         self._drag_controller = None
+        self._transform_non_net_source = None
+        self._transform_non_net_preview = None
+        self._transform_center = None
+        self._transforming = False
         self._make_inspector()
 
     @staticmethod
@@ -214,12 +219,20 @@ class GroupEditor(QObject):
             self._before = [self._state(obj) for obj in self._objects]
 
     def _commit(self):
+        if not self._transforming:
+            # A new keyboard transform sequence should use the current group
+            # geometry.  Consecutive transforms keep their original pivot so
+            # integer QRect/QTransform rounding cannot make an involution
+            # such as mirror-then-mirror drift by one unit.
+            self._transform_center = None
         if self._net_preview is not None:
             selected_preview = self._selected_preview_segments()
             non_net_preview = (self._drag_controller.preview
-                               if self._drag_controller is not None else [])
+                               if self._drag_controller is not None
+                               else (self._transform_non_net_preview or []))
             non_net_source = (self._drag_controller.selected
-                              if self._drag_controller is not None else [])
+                              if self._drag_controller is not None
+                              else (self._transform_non_net_source or []))
             if non_net_source:
                 before = [NetObj(net.pt1, net.pt2) for net in self._net_source]
                 after = [NetObj(net.pt1, net.pt2) for net in self._net_preview]
@@ -233,6 +246,8 @@ class GroupEditor(QObject):
                 self._net_preview = None
                 self._net_selected_preview = None
                 self._drag_controller = None
+                self._transform_non_net_source = None
+                self._transform_non_net_preview = None
                 self._before = None
                 self.sigUpdate.emit()
                 return
@@ -247,6 +262,8 @@ class GroupEditor(QObject):
             self._net_source = None
             self._net_preview = None
             self._net_selected_preview = None
+            self._transform_non_net_source = None
+            self._transform_non_net_preview = None
             self._before = None
             self.sigUpdate.emit()
             return
@@ -287,35 +304,25 @@ class GroupEditor(QObject):
         return transform.map(point)
 
     def _transform(self, transform, angle=0, flip=None):
-        self._begin()
-        if any(isinstance(obj, NetObj) for obj in self._objects):
-            self._net_source = list(self._ctrl.doc.objects(objType=NetObj))
-            self._net_selected_ids = {id(obj) for obj in self._objects
-                                      if isinstance(obj, NetObj)}
-            self._transform_preview(transform)
+        self._transforming = True
+        try:
+            self._begin()
+            if any(isinstance(obj, NetObj) for obj in self._objects):
+                self._net_source = list(self._ctrl.doc.objects(objType=NetObj))
+                self._net_selected_ids = {id(obj) for obj in self._objects
+                                          if isinstance(obj, NetObj)}
+                self._transform_non_net_source = [
+                    obj for obj in self._objects if not isinstance(obj, NetObj)]
+                self._transform_non_net_preview = self._build_transform_preview(
+                    self._transform_non_net_source, transform, angle, flip)
+                self._transform_preview(transform)
+                self._commit()
+                return
+            for obj in self._objects:
+                self._apply_transform(obj, transform, angle, flip)
             self._commit()
-            return
-        for obj in self._objects:
-            if isinstance(obj, NetObj):
-                replacement = NetObj(self._map_point(transform, obj.pt1),
-                                     self._map_point(transform, obj.pt2))
-                self._ctrl.doc.removeObj(obj)
-                self._ctrl.doc.addObj(replacement)
-                self._objects[self._objects.index(obj)] = replacement
-                continue
-            if isinstance(obj, LineObj):
-                obj.pt1 = self._map_point(transform, obj.pt1)
-                obj.pt2 = self._map_point(transform, obj.pt2)
-            elif isinstance(obj, (TextObj, PartObj, SheetRefObj)):
-                obj.pos = self._map_point(transform, obj.pos)
-                if hasattr(obj, "rot"):
-                    obj.rot = (obj.rot + angle) % 360
-                if flip is not None and hasattr(obj, "mirror"):
-                    obj.mirror = not obj.mirror
-            elif isinstance(obj, PropTextObj):
-                obj.setPosGlobal(self._map_point(transform, obj.posGlobal()))
-                obj.rot = (obj.rot + angle) % 360
-        self._commit()
+        finally:
+            self._transforming = False
 
     def _center(self):
         return self.bbox().center()
@@ -342,6 +349,7 @@ class GroupEditor(QObject):
         return self._hit(point)
 
     def startDrag(self, point):
+        self._transform_center = None
         self._drag_origin_inside = self.bbox().contains(point)
         nets = [obj for obj in self._objects if isinstance(obj, NetObj)]
         others = [obj for obj in self._objects if not isinstance(obj, NetObj)]
@@ -367,10 +375,33 @@ class GroupEditor(QObject):
             if isinstance(obj, LineObj):
                 obj.pt1 = transform.map(original.pt1)
                 obj.pt2 = transform.map(original.pt2)
-            elif isinstance(obj, (TextObj, PartObj, SheetRefObj)):
+            elif isinstance(obj, (TextObj, PartObj, SheetRefObj, PinObj)):
                 obj.pos = transform.map(original.pos)
             elif isinstance(obj, PropTextObj):
                 obj.setPosGlobal(transform.map(original.posGlobal()))
+            result.append(obj)
+        return result
+
+    @staticmethod
+    def _apply_transform(obj, transform, angle=0, flip=None):
+        if isinstance(obj, LineObj):
+            obj.pt1 = transform.map(obj.pt1)
+            obj.pt2 = transform.map(obj.pt2)
+        elif isinstance(obj, (TextObj, PartObj, SheetRefObj, PinObj)):
+            obj.pos = transform.map(obj.pos)
+            if hasattr(obj, "rot"):
+                obj.rot = (obj.rot + angle) % 360
+            if flip is not None and hasattr(obj, "mirror"):
+                obj.mirror = not obj.mirror
+        elif isinstance(obj, PropTextObj):
+            obj.setPosGlobal(transform.map(obj.posGlobal()))
+            obj.rot = (obj.rot + angle) % 360
+
+    def _build_transform_preview(self, objects, transform, angle=0, flip=None):
+        result = []
+        for original in objects:
+            obj = copy.copy(original)
+            self._apply_transform(obj, transform, angle, flip)
             result.append(obj)
         return result
 
@@ -457,7 +488,9 @@ class GroupEditor(QObject):
                     self._ctrl.doc.removeObj(obj)
                 self.sigDone.emit(); event.handled = True
             elif event.key in (Qt.Key_R, Qt.Key_H, Qt.Key_V):
-                center = self._center()
+                if self._transform_center is None:
+                    self._transform_center = self._center()
+                center = self._transform_center
                 tr = QTransform()
                 tr.translate(center.x(), center.y())
                 if event.key == Qt.Key_R:
@@ -492,11 +525,10 @@ class GroupEditor(QObject):
                 self._ctrl.doc.addObj(replacement)
                 self._objects[self._objects.index(obj)] = replacement
             elif isinstance(obj, LineObj):
-                obj.pt1 = transform.map(obj.pt1); obj.pt2 = transform.map(obj.pt2)
-            elif isinstance(obj, (TextObj, PartObj, SheetRefObj)):
-                obj.pos = transform.map(obj.pos)
-            elif isinstance(obj, PropTextObj):
-                obj.setPosGlobal(transform.map(obj.posGlobal()))
+                self._apply_transform(obj, transform)
+            elif isinstance(obj, (TextObj, PartObj, SheetRefObj, PinObj,
+                                  PropTextObj)):
+                self._apply_transform(obj, transform)
 
     def _master_changed(self, path, name):
         self._begin()

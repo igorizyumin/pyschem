@@ -10,12 +10,13 @@ from PySide6.QtGui import QMouseEvent, QTransform
 from PySide6.QtWidgets import QApplication
 
 from sch.controller import SchController
-from sch.document import DocPage, MasterDocument
+from sch.document import DocPage, MasterDocument, SymbolPage
 from sch.obj.line import LineObj
 from sch.obj.net import NetObj
+from sch.obj.pin import PinObj
 from sch.obj.text import TextObj
 from sch.tools.group import GroupEditor
-from sch.view import SchView
+from sch.view import Event, SchView
 
 
 class GuiHarness:
@@ -95,6 +96,133 @@ class TestGuiInteractions(unittest.TestCase):
         self.assertEqual([obj.pt1 for obj in moved],
                          [QPoint(5000, 0), QPoint(5000, 10000)])
         self.assertEqual(len(gui.tool._selection), 2)
+
+    def test_line_body_drag_moves_both_endpoints_and_is_undoable(self):
+        line = LineObj(QPoint(0, 0), QPoint(50000, 0))
+        gui = GuiHarness([line])
+
+        # The press is well away from either endpoint, so it starts a body
+        # drag instead of editing one endpoint.
+        gui.press(QPoint(25000, 0))
+        gui.move(QPoint(35000, 0))
+        self.assertEqual(line.pt1, QPoint(10000, 0))
+        self.assertEqual(line.pt2, QPoint(60000, 0))
+
+        gui.release(QPoint(35000, 0))
+        self.assertEqual(gui.page.undoStack.count(), 1)
+        self.assertEqual(next(iter(gui.page.objects(LineObj))).pt1,
+                         QPoint(10000, 0))
+        self.assertEqual(next(iter(gui.page.objects(LineObj))).pt2,
+                         QPoint(60000, 0))
+
+        gui.page.undo()
+        self.assertEqual(line.pt1, QPoint(0, 0))
+        self.assertEqual(line.pt2, QPoint(50000, 0))
+        gui.page.redo()
+        self.assertEqual(line.pt1, QPoint(10000, 0))
+        self.assertEqual(line.pt2, QPoint(60000, 0))
+        gui.tool._editor.dispose()
+
+    def test_line_body_drag_cancel_restores_line_without_undo(self):
+        line = LineObj(QPoint(0, 0), QPoint(50000, 0))
+        gui = GuiHarness([line])
+
+        gui.press(QPoint(25000, 0))
+        gui.move(QPoint(35000, 0))
+        gui.tool._editor.handleEvent(Event(Event.Type.Cancel))
+
+        self.assertEqual(line.pt1, QPoint(0, 0))
+        self.assertEqual(line.pt2, QPoint(50000, 0))
+        self.assertEqual(gui.page.undoStack.count(), 0)
+        gui.tool._editor.dispose()
+
+    def test_group_drag_moves_selected_symbol_pin_with_line(self):
+        page = SymbolPage(MasterDocument(None))
+        pin = PinObj("1", pos=QPoint(0, 0))
+        line = LineObj(QPoint(0, 0), QPoint(5000, 0))
+        page.addObj(pin)
+        page.addObj(line)
+
+        class Controller:
+            doc = page
+
+            @staticmethod
+            def snapPt(point):
+                return QPoint(point)
+
+        editor = GroupEditor(Controller(), [pin, line])
+        editor.handleEvent(Event(Event.Type.MousePressed, QPoint(2500, 0)))
+        editor.handleEvent(Event(Event.Type.MouseMoved, QPoint(7500, 0)))
+
+        # Group drags are preview-only until release, and both selected
+        # objects must share the same displacement in that preview.
+        preview_pin, preview_line = editor._drag_controller.preview
+        self.assertEqual(preview_pin.pos, QPoint(5000, 0))
+        self.assertEqual(preview_line.pt1, QPoint(5000, 0))
+        self.assertEqual(pin.pos, QPoint(0, 0))
+        self.assertEqual(line.pt1, QPoint(0, 0))
+
+        editor.handleEvent(Event(Event.Type.MouseReleased, QPoint(7500, 0)))
+        moved_pin = next(iter(page.objects(PinObj)))
+        moved_line = next(iter(page.objects(LineObj)))
+        self.assertEqual(moved_pin.pos, QPoint(5000, 0))
+        self.assertEqual(moved_line.pt1, QPoint(5000, 0))
+        self.assertEqual(moved_line.pt2, QPoint(10000, 0))
+
+        page.undo()
+        self.assertEqual(next(iter(page.objects(PinObj))).pos, QPoint(0, 0))
+        self.assertEqual(next(iter(page.objects(LineObj))).pt1, QPoint(0, 0))
+        editor.dispose()
+
+    def test_group_rotate_and_mirror_move_lines_and_text(self):
+        original_line = (QPoint(0, 0), QPoint(10000, 5000))
+        original_text = QPoint(20000, 10000)
+
+        for key in (Qt.Key_R, Qt.Key_H, Qt.Key_V):
+            page = DocPage(MasterDocument(None))
+            line = LineObj(*original_line)
+            text = TextObj("label", original_text)
+            page.addObj(line)
+            page.addObj(text)
+
+            class Controller:
+                doc = page
+
+            editor = GroupEditor(Controller(), [line, text])
+            event = Event(Event.Type.KeyPressed, key=key)
+            editor.handleEvent(event)
+
+            self.assertTrue(event.handled)
+            self.assertNotEqual((line.pt1, line.pt2), original_line)
+            self.assertNotEqual(text.pos, original_text)
+            editor.dispose()
+
+    def test_mixed_group_mirror_twice_restores_nets_and_text(self):
+        page = DocPage(MasterDocument(None))
+        net = NetObj(QPoint(0, 0), QPoint(10000, 0))
+        text = TextObj("label", QPoint(15000, 10000))
+        page.addObj(net)
+        page.addObj(text)
+
+        class Controller:
+            doc = page
+
+        editor = GroupEditor(Controller(), [net, text])
+        original_net = (net.pt1, net.pt2)
+        original_text = QPoint(text.pos)
+
+        editor.handleEvent(Event(Event.Type.KeyPressed, key=Qt.Key_H))
+        self.assertEqual(len(editor._objects), 2)
+        self.assertNotEqual(next(iter(page.objects(TextObj))).pos,
+                            original_text)
+
+        editor.handleEvent(Event(Event.Type.KeyPressed, key=Qt.Key_H))
+        restored_net = next(iter(page.objects(NetObj)))
+        restored_text = next(iter(page.objects(TextObj)))
+        self.assertEqual((restored_net.pt1, restored_net.pt2), original_net)
+        self.assertEqual(restored_text.pos, original_text)
+        self.assertEqual(len(editor._objects), 2)
+        editor.dispose()
 
     def test_net_body_drag_does_not_leave_a_pending_rectangle_selection(self):
         net = NetObj(QPoint(0, 0), QPoint(5000, 0))
