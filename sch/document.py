@@ -20,12 +20,14 @@ class MasterDocument(QObject):
     sigChanged = Signal()
     sigCleanChanged = Signal()
 
-    def __init__(self, lib):
+    def __init__(self, lib, project_root=None, document_cache=None):
         QObject.__init__(self)
         self._uuid = uuid4()
         self._symbols = []
         self._pages = []
         self.lib = lib
+        self._project_root = Path(project_root).resolve() if project_root else None
+        self._project_documents = document_cache if document_cache is not None else {}
         self.fileName = None
         self.symProps = {}
 
@@ -43,6 +45,26 @@ class MasterDocument(QObject):
     @property
     def pages(self):
         return self._pages
+
+    @property
+    def projectRoot(self):
+        """Root directory containing every document in this project."""
+        if self._project_root is not None:
+            return self._project_root
+        if self.fileName is not None:
+            return Path(self.fileName).resolve().parent
+        return None
+
+    def loadProjectDocument(self, file_path):
+        """Load and cache a child document from this project's directory."""
+        canonical = Path(file_path).resolve()
+        cache = self._project_documents
+        if str(canonical) not in cache:
+            child = MasterDocument(self.lib, project_root=self.projectRoot,
+                                   document_cache=cache)
+            child.loadFromFile(str(canonical))
+            cache[str(canonical)] = child
+        return cache[str(canonical)]
 
     @staticmethod
     def _uniqueName(names, prefix):
@@ -87,32 +109,44 @@ class MasterDocument(QObject):
         with open(file, "rb") as f:
             doc = etree.parse(f)
         rng.assertValid(doc)
-        self._symbols.clear()
-        self._pages.clear()
-        self.symProps.clear()
+        # Parse into detached collections first.  Validation above protects
+        # against schema-invalid input, while this second boundary protects
+        # an already-open document from partial replacement when a value is
+        # malformed or an object parser raises.
+        new_symbols = []
+        new_pages = []
+        new_sym_props = {}
+        new_uuid = self._uuid
         root = doc.getroot()
         for child in root:
             if child.tag == "props":
                 uuid = child.find("uuid")
-                self._uuid = UUID(uuid.text)
+                new_uuid = UUID(uuid.text)
             elif child.tag == "symbol":
                 for obj in child:
                     if obj.tag == "symPart":
                         newp = SymbolPage(self)
                         newp.fromXml(obj)
                         newp.sigChanged.connect(self.sigCleanChanged)
-                        self._symbols.append(newp)
+                        new_symbols.append(newp)
                     elif obj.tag == "props":
                         for pr in obj:
                             if pr.tag == 'prop':
-                                self.symProps[pr.attrib['name']] = pr.text
+                                new_sym_props[pr.attrib['name']] = pr.text
             elif child.tag == "pages":
                 for pg in child:
                     newp = DocPage(self)
                     newp.fromXml(pg)
                     newp.sigChanged.connect(self.sigCleanChanged)
-                    self._pages.append(newp)
+                    new_pages.append(newp)
+        self._uuid = new_uuid
+        self._symbols = new_symbols
+        self._pages = new_pages
+        self.symProps = new_sym_props
         self.fileName = file
+        if self._project_root is None:
+            self._project_root = Path(file).resolve().parent
+        self._project_documents[str(Path(file).resolve())] = self
         self.sigChanged.emit()
 
     def saveToFile(self, file=None):
@@ -125,6 +159,8 @@ class MasterDocument(QObject):
         for d in self._symbols+self._pages:
             d.undoStack.setClean()
         self.fileName = file
+        if self._project_root is None:
+            self._project_root = Path(file).resolve().parent
 
     def toXml(self, parentNode):
         props = etree.SubElement(parentNode, "props")
@@ -261,6 +297,14 @@ class DocPage(AbstractPage):
         self._objs.add(ref)
         ref.setDoc(self._parent)
 
+    def addObj(self, obj):
+        if isinstance(obj, sch.obj.sheetref.SheetRefObj):
+            if obj not in self._sheet_refs:
+                self.addSheetReference(obj)
+            self.sigChanged.emit()
+            return
+        super().addObj(obj)
+
     def removeSheetReference(self, ref: sch.obj.sheetref.SheetRefObj) -> None:
         """
         Remove a sheet reference from this page.
@@ -271,6 +315,13 @@ class DocPage(AbstractPage):
         if ref in self._sheet_refs:
             self._sheet_refs.remove(ref)
         self._objs.discard(ref)
+
+    def removeObj(self, obj):
+        if isinstance(obj, sch.obj.sheetref.SheetRefObj):
+            self.removeSheetReference(obj)
+            self.sigChanged.emit()
+            return
+        super().removeObj(obj)
 
     def fromXml(self, pageNode):
         self._name = pageNode.attrib["name"]
@@ -462,10 +513,26 @@ class ObjChangeCmd(BaseUndoCmd):
     @staticmethod
     def _Memento(obj, deep=False):
         state = (copy.copy, copy.deepcopy)[bool(deep)](obj.__dict__)
+        # Property inspectors mutate a PartPropertyStore nested under a
+        # PropTextObj's parent.  A shallow object snapshot therefore misses
+        # those edits.  Keep the small, serializable override map alongside
+        # the regular object state so inspector changes undo reliably.
+        property_parent = state.get('_parent')
+        property_overrides = None
+        if property_parent is not None and hasattr(property_parent, 'properties'):
+            try:
+                property_overrides = property_parent.properties.get_overrides()
+            except (AttributeError, KeyError):
+                property_overrides = None
 
         def Restore():
             obj.__dict__.clear()
             obj.__dict__.update(state)
+            if property_overrides is not None:
+                store = property_parent.properties
+                store.reset_all()
+                for name, value in property_overrides.items():
+                    store.set(name, value)
         return Restore
 
     # this should be called with the unmodified object, which is then changed

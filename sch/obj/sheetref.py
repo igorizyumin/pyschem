@@ -5,8 +5,10 @@ This module defines the sheet reference object that enables multi-level
 schematic design by referencing child pages.
 """
 
+from pathlib import Path
 from typing import List, Tuple, Dict, Optional
-from PySide6.QtCore import QPoint
+from PySide6.QtCore import QPoint, QRect, Qt
+from PySide6.QtGui import QBrush, QPainter, QPen, QTransform
 from lxml import etree
 import sch.obj.port
 from sch.obj.port import Port, PortDirection
@@ -47,6 +49,8 @@ class SheetRefObj:
         self._label_visible = True
         self._port_label_style = "full"  # Options: "full", "name", "direction", "none"
         self._doc = None  # Reference to parent document (set when added to page)
+        self._resolution_error = None
+        self._resolved = None
     
     @property
     def rot(self) -> int:
@@ -152,17 +156,24 @@ class SheetRefObj:
         if not self.path:
             return ""
         
-        # If path is already absolute, return as-is
-        if self.path.startswith("/") or (len(self.path) > 1 and self.path[1] == ":"):
-            return self.path
-        
-        # If parent_doc_path is provided, resolve relative to it
-        if parent_doc_path:
-            import os
-            parent_dir = os.path.dirname(parent_doc_path)
-            return os.path.join(parent_dir, self.path)
-        
-        return self.path
+        if Path(self.path).is_absolute():
+            raise ValueError("Sheet references must use a relative project path")
+        if not parent_doc_path:
+            raise ValueError("A parent document path is required for sheet resolution")
+        project_root = getattr(self._doc, "projectRoot", None)
+        if project_root is None:
+            project_root = Path(parent_doc_path).resolve().parent
+        project_root = Path(project_root).resolve()
+        candidate = (Path(parent_doc_path).resolve().parent / self.path).resolve()
+        try:
+            candidate.relative_to(project_root)
+        except ValueError as error:
+            raise ValueError("Sheet reference escapes the project directory") from error
+        return str(candidate)
+
+    @property
+    def resolution_error(self):
+        return self._resolution_error
     
     def resolve_target(self) -> Tuple[Optional['sch.document.MasterDocument'], Optional['sch.document.DocPage']]:
         """
@@ -173,33 +184,28 @@ class SheetRefObj:
         """
         if self._doc is None:
             return (None, None)
-        
-        # Try to find the page in the current document
-        for page in self._doc.pages:
+        self._resolution_error = None
+        if not self.path:
+            target_doc = self._doc
+        else:
+            try:
+                effective_path = self.get_effective_path(self._doc.fileName)
+                target_doc = self._doc.loadProjectDocument(effective_path)
+            except Exception as error:
+                self._resolution_error = str(error)
+                return (None, None)
+
+        if self._resolved is not None and self._resolved[0] is target_doc:
+            return self._resolved
+        for page in target_doc.pages:
             if page.name == self.page_name:
-                return (self._doc, page)
-        
-        # Try to load from external file
-        try:
-            effective_path = self.get_effective_path()
-            import os
-            if os.path.exists(effective_path):
-                # Load the external document
-                from sch.document import MasterDocument
-                from sch.library import PartLibrary
-                lib = PartLibrary()
-                external_doc = MasterDocument(lib)
-                external_doc.loadFromFile(effective_path)
-                
-                # Find the page
-                for page in external_doc.pages:
-                    if page.name == self.page_name:
-                        return (external_doc, page)
-        except Exception:
-            pass
-        
+                self._resolved = (target_doc, page)
+                return self._resolved
+
+        self._resolution_error = f"Page '{self.page_name}' was not found"
         return (None, None)
-    
+
+
     def getPortConnections(self) -> Dict[str, List[str]]:
         """
         Get port-to-net mappings.
@@ -209,6 +215,60 @@ class SheetRefObj:
             Used by netlist plugins.
         """
         return {port.name: port.net_names for port in self._ports}
+
+    def _local_rect(self) -> QRect:
+        return QRect(-self.WIDTH // 2, -self.HEIGHT // 2, self.WIDTH, self.HEIGHT)
+
+    def _port_position(self, index: int) -> Tuple[QPoint, bool]:
+        """Return a local port anchor and whether its label is on the left."""
+        port = self._ports[index]
+        side_ports = [p for p in self._ports
+                      if p.direction in (PortDirection.INPUT, PortDirection.PASSIVE)]
+        side_index = side_ports.index(port) if port in side_ports else index
+        count = max(len(side_ports), 1) if port.direction in (
+            PortDirection.INPUT, PortDirection.PASSIVE) else max(
+                len(self._ports) - len(side_ports), 1)
+        y = int(-self.HEIGHT // 2 + (side_index + 1) * self.HEIGHT / (count + 1))
+        left = port.direction in (PortDirection.INPUT, PortDirection.PASSIVE)
+        x = -self.WIDTH // 2 if left else self.WIDTH // 2
+        return QPoint(x, y), left
+
+    def draw(self, painter: QPainter) -> None:
+        """Draw a sheet as a labeled rectangle with directional ports."""
+        painter.save()
+        painter.translate(self.pos)
+        painter.rotate(self.rot)
+        painter.scale(-1 if self.mirror else 1, 1)
+        rect = self._local_rect()
+        painter.setPen(QPen(Qt.darkBlue, 0))
+        painter.setBrush(QBrush(Qt.NoBrush))
+        painter.drawRect(rect)
+        if self.label_visible:
+            painter.drawText(rect, Qt.AlignCenter, self.page_name or "<sheet>")
+        for index, port in enumerate(self._ports):
+            anchor, left = self._port_position(index)
+            painter.drawLine(anchor, QPoint(anchor.x() + (-1000 if left else 1000), anchor.y()))
+            if self.port_label_style != "none" and port.visible:
+                if self.port_label_style == "name":
+                    label = port.name
+                elif self.port_label_style == "direction":
+                    label = port.direction.value
+                else:
+                    label = f"{port.name} ({port.direction.value})"
+                label_rect = QRect(anchor.x() + (-5000 if left else 1200),
+                                   anchor.y() - 500, 4800, 1000)
+                painter.drawText(label_rect, Qt.AlignLeft if left else Qt.AlignRight, label)
+        painter.restore()
+
+    def bbox(self) -> QRect:
+        transform = QTransform()
+        transform.translate(self.pos.x(), self.pos.y())
+        transform.rotate(self.rot)
+        transform.scale(-1 if self.mirror else 1, 1)
+        return transform.mapRect(self._local_rect()).normalized()
+
+    def testHit(self, pt: QPoint, radius: int = 0) -> bool:
+        return self.bbox().adjusted(-radius, -radius, radius, radius).contains(pt)
     
     def setDoc(self, doc: 'sch.document.MasterDocument') -> None:
         """
@@ -293,3 +353,5 @@ class SheetRefObj:
                     obj._ports.append(port)
         
         return obj
+    WIDTH = 12000
+    HEIGHT = 7000

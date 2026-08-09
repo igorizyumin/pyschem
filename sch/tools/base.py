@@ -16,6 +16,7 @@ class EditHandle(QObject):
         self.pos = QPoint(pos)
         self._dragging = False
         self._moved = False
+        self.modifiers = Qt.NoModifier
 
     def draw(self, painter: QPainter):
         r = self._ctrl.view.hitRadius() * 0.7
@@ -28,6 +29,7 @@ class EditHandle(QObject):
     def handleEvent(self, event: Event):
         if event.evType == Event.Type.MouseMoved:
             if self._dragging:
+                self.modifiers = event.modifiers
                 if self.pos != self._ctrl.snapPt(event.pos):
                     self.pos = self._ctrl.snapPt(event.pos)
                     self.sigDragged.emit(self.pos)
@@ -35,14 +37,17 @@ class EditHandle(QObject):
                 event.handled = True
         elif event.evType == Event.Type.MousePressed:
             if self.testHit(event.pos):
+                self.modifiers = event.modifiers
                 self._dragging = True
                 self._moved = False
                 event.handled = True
         elif event.evType == Event.Type.MouseReleased:
             if self._dragging:
                 self._dragging = False
+                self.modifiers = event.modifiers
                 if self._moved or self.pos != self._ctrl.snapPt(event.pos):
                     self.pos = self._ctrl.snapPt(event.pos)
+                    self.sigDragged.emit(self.pos)
                     self.sigMoved.emit(self.pos)
                 event.handled = True
 

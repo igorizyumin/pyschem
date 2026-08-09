@@ -10,6 +10,7 @@ from sch.forms.projectdock import ProjectDock
 from sch.forms.inspector import InspectorDock
 from sch.library import PartLibrary
 from functools import partial
+from pathlib import Path
 import traceback
 
 
@@ -25,7 +26,7 @@ class MainWindow(QMainWindow):
         self.ui.actionUndo.setEnabled(False)
         self.ui.actionRedo.setEnabled(False)
         self.ui.actionUndo.triggered.connect(self.tabUndo)
-        self.ui.actionUndo.triggered.connect(self.tabRedo)
+        self.ui.actionRedo.triggered.connect(self.tabRedo)
         self.docs = []
         self.lib = PartLibrary()
         self.toolsDock = ToolsDock(self)
@@ -72,6 +73,7 @@ class MainWindow(QMainWindow):
             return self.saveAsDoc(doc)
         else:
             doc.saveToFile()
+            self.lib.set_project_root(doc.projectRoot)
             self.ui.statusbar.showMessage("Document saved", 5000)
             return True
 
@@ -80,6 +82,7 @@ class MainWindow(QMainWindow):
         if fn == "":
             return False
         doc.saveToFile(fn)
+        self.lib.set_project_root(doc.projectRoot)
         self.ui.statusbar.showMessage("Document saved as {}".format(fn), 5000)
         return True
 
@@ -125,6 +128,7 @@ class MainWindow(QMainWindow):
             try:
                 d = MasterDocument(self.lib)
                 d.loadFromFile(fn)
+                self.lib.set_project_root(Path(fn).resolve().parent)
                 self.docs.append(d)
                 self.docsChanged.emit()
                 self.ui.statusbar.showMessage("Document loaded", 5000)

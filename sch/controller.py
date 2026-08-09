@@ -7,6 +7,7 @@ import sch.obj.net
 import sch.obj.text
 import sch.obj.part
 import sch.tools.select
+import sch.tools.hierarchy
 from sch.view import Event
 from sch.utils import Layer, LayerType
 import sch.document
@@ -20,6 +21,7 @@ class ToolType(Enum):
         NetTool = 2
         TextTool = 3
         PartTool = 4
+        SheetRefTool = 5
 
 
 def getCtrl(doc):
@@ -146,6 +148,8 @@ class Controller(QObject):
             hidden = tuple(self._tool.hiddenObjects())
         out = [obj for obj in self.doc.objects()
                if not any(obj is item for item in hidden)]
+        if self._tool is not None and hasattr(self._tool, 'previewDrawables'):
+            out.extend(self._tool.previewDrawables())
         out.append(JunctionDrawable())
         if self._tool is not None:
             out.append(self._tool)
@@ -170,7 +174,9 @@ class SchController(Controller):
 
     @staticmethod
     def tools():
-        return sch.tools.select.SelectTool, sch.tools.line.LineTool, sch.tools.net.NetTool, sch.tools.text.TextTool, sch.tools.part.PartTool
+        return (sch.tools.select.SelectTool, sch.tools.line.LineTool,
+                sch.tools.net.NetTool, sch.tools.text.TextTool,
+                sch.tools.part.PartTool, sch.tools.hierarchy.SheetRefTool)
 
 
 class SymController(Controller):

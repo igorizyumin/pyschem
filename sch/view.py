@@ -17,12 +17,13 @@ class Event(object):
         KeyReleased = 6
         MouseDblClicked = 7
 
-    def __init__(self, evType, pos=None, key=None):
+    def __init__(self, evType, pos=None, key=None, modifiers=Qt.KeyboardModifier.NoModifier):
         super().__init__()
         assert pos is None or type(pos) is QPoint
         self.evType = evType
         self.pos = pos
         self.key = key
+        self.modifiers = modifiers
         self.handled = False
 
 
@@ -120,30 +121,34 @@ class SchView(QWidget):
             self._transform.translate(dl.dx(), dl.dy())
             self.update()
         self._handleEvent(Event(evType=Event.Type.MouseMoved,
-                                pos=self._transform.inverted()[0].map(e.position()).toPoint()))
+                                pos=self._transform.inverted()[0].map(e.position()).toPoint(),
+                                modifiers=e.modifiers()))
         self._mousePos = e.position()
 
     def mousePressEvent(self, e):
         if e.button() == Qt.LeftButton:
             self._handleEvent(Event(evType=Event.Type.MousePressed,
-                                    pos=self._transform.inverted()[0].map(e.position()).toPoint()))
+                                    pos=self._transform.inverted()[0].map(e.position()).toPoint(),
+                                    modifiers=e.modifiers()))
 
     def mouseReleaseEvent(self, e):
         if e.button() == Qt.LeftButton:
             self._handleEvent(Event(evType=Event.Type.MouseReleased,
-                                    pos=self._transform.inverted()[0].map(e.position()).toPoint()))
+                                    pos=self._transform.inverted()[0].map(e.position()).toPoint(),
+                                    modifiers=e.modifiers()))
 
     def mouseDoubleClickEvent(self, e):
         if e.button() == Qt.LeftButton:
             self._handleEvent(Event(evType=Event.Type.MouseDblClicked,
-                                    pos=self._transform.inverted()[0].map(e.position()).toPoint()))
+                                    pos=self._transform.inverted()[0].map(e.position()).toPoint(),
+                                    modifiers=e.modifiers()))
 
     def hitRadius(self):
         return self._transform.inverted()[0].m11()*6     # 6 pixels
 
     def keyPressEvent(self, e):
         self._handleEvent(Event(evType=Event.Type.KeyPressed,
-                                key=e.key()))
+                                key=e.key(), modifiers=e.modifiers()))
 
     def keyReleaseEvent(self, e: QKeyEvent):
         self._handleEvent(Event(evType=Event.Type.KeyReleased,

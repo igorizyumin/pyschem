@@ -5,9 +5,14 @@ This module provides utilities for navigating and analyzing schematic hierarchy,
 including finding child pages, ancestors, and validating the hierarchy structure.
 """
 
+from pathlib import Path
 from typing import List, Tuple, Optional, Set
-from sch.document import MasterDocument, DocPage
+from PySide6.QtCore import Signal, Slot, Qt, QPoint, QObject
+from PySide6.QtGui import QPainter
+from PySide6.QtWidgets import QCheckBox, QFormLayout, QLineEdit, QWidget
+from sch.document import MasterDocument, DocPage, ObjAddCmd
 from sch.obj.sheetref import SheetRefObj
+from sch.tools.base import BaseEditor, EditHandle
 
 
 class HierarchyResolver:
@@ -160,7 +165,13 @@ class HierarchyResolver:
             List of error messages (empty if valid).
         """
         errors = []
-        visited_paths: Set[str] = set()
+        active_pages: Set[str] = set()
+
+        def page_key(page: DocPage) -> str:
+            doc_path = getattr(page.parentDoc, "fileName", None)
+            if doc_path:
+                return f"{Path(doc_path).resolve()}::{page.name}"
+            return f"memory:{id(page.parentDoc)}::{page.name}"
         
         def validate_page(page: DocPage, path: List[str], depth: int = 0) -> bool:
             """
@@ -174,21 +185,22 @@ class HierarchyResolver:
             Returns:
                 True if valid, False if error found
             """
-            nonlocal errors, visited_paths
+            nonlocal errors
             
             # Create a unique identifier for this page in the hierarchy
-            path_key = "/".join(path)
+            path_key = page_key(page)
             
             # Check for circular references
-            if path_key in visited_paths:
+            if path_key in active_pages:
                 errors.append(f"Circular reference detected: {' -> '.join(path)}")
                 return False
-            
-            visited_paths.add(path_key)
+
+            active_pages.add(path_key)
             
             # Limit recursion depth to prevent infinite loops
             if depth > 100:
                 errors.append(f"Maximum hierarchy depth exceeded at: {' -> '.join(path)}")
+                active_pages.remove(path_key)
                 return False
             
             # Validate each sheet reference on this page
@@ -217,7 +229,7 @@ class HierarchyResolver:
                     # Recursively validate the child page
                     child_path = path + [f"{ref_page} (from {ref_path})"]
                     validate_page(target_page, child_path, depth + 1)
-            
+            active_pages.remove(path_key)
             return True
         
         # Validate all top-level pages
@@ -233,11 +245,19 @@ class HierarchyResolver:
         Returns:
             List of all DocPage objects in the hierarchy.
         """
+        def page_key(page: DocPage) -> str:
+            doc_path = getattr(page.parentDoc, "fileName", None)
+            if doc_path:
+                return f"{Path(doc_path).resolve()}::{page.name}"
+            return f"memory:{id(page.parentDoc)}::{page.name}"
+
         all_pages = list(self.master.pages)
+        visited = {page_key(page) for page in all_pages}
         
         def collect_pages(page: DocPage):
             for sheet_ref, child_page in self.get_child_pages(page):
-                if child_page is not None and child_page not in all_pages:
+                if child_page is not None and page_key(child_page) not in visited:
+                    visited.add(page_key(child_page))
                     all_pages.append(child_page)
                     collect_pages(child_page)
         
@@ -268,3 +288,137 @@ class HierarchyResolver:
                     results.append((child_page.parentDoc, child_page))
         
         return results
+
+
+class SheetRefInspector(QWidget):
+    """Small editor for a sheet reference's project-relative target."""
+
+    changed = Signal()
+
+    def __init__(self, obj=None, parent=None):
+        super().__init__(parent)
+        self._obj = None
+        self.path_edit = QLineEdit()
+        self.page_edit = QLineEdit()
+        self.label_visible = QCheckBox()
+        self.label_visible.setChecked(True)
+        form = QFormLayout(self)
+        form.addRow("Child document", self.path_edit)
+        form.addRow("Child page", self.page_edit)
+        form.addRow("Show label", self.label_visible)
+        self.path_edit.editingFinished.connect(self._emit_changed)
+        self.page_edit.editingFinished.connect(self._emit_changed)
+        self.label_visible.toggled.connect(self._emit_changed)
+        self.obj = obj
+
+    @property
+    def obj(self):
+        return self._obj
+
+    @obj.setter
+    def obj(self, value):
+        self._obj = value
+        blocked = self.blockSignals(True)
+        if value is not None:
+            self.path_edit.setText(value.path)
+            self.page_edit.setText(value.page_name)
+            self.label_visible.setChecked(value.label_visible)
+        else:
+            self.path_edit.clear()
+            self.page_edit.clear()
+        self.blockSignals(blocked)
+
+    @Slot()
+    def _emit_changed(self):
+        if self._obj is not None:
+            self._obj.path = self.path_edit.text().strip()
+            self._obj.page_name = self.page_edit.text().strip()
+            self._obj.label_visible = self.label_visible.isChecked()
+            self.changed.emit()
+
+    def create_object(self, pos: QPoint) -> SheetRefObj:
+        obj = SheetRefObj(self.path_edit.text().strip(), self.page_edit.text().strip(), pos)
+        obj.label_visible = self.label_visible.isChecked()
+        return obj
+
+
+class SheetRefTool(QObject):
+    """Place a project-relative sheet reference at the clicked position."""
+
+    sigUpdate = Signal()
+
+    def __init__(self, ctrl):
+        super().__init__()
+        self._ctrl = ctrl
+        self._pos = QPoint()
+        self._inspector = SheetRefInspector()
+
+    @staticmethod
+    def name():
+        return "Place Sheet Reference"
+
+    @property
+    def inspector(self):
+        return self._inspector
+
+    def finish(self):
+        self.sigUpdate.emit()
+
+    def draw(self, painter: QPainter):
+        if self._inspector.page_edit.text().strip():
+            preview = self._inspector.create_object(self._pos)
+            preview.draw(painter)
+
+    def handleEvent(self, event):
+        from sch.view import Event
+        if event.evType == Event.Type.MouseMoved:
+            self._pos = self._ctrl.snapPt(event.pos)
+            self.sigUpdate.emit()
+            event.handled = True
+        elif event.evType == Event.Type.MouseReleased:
+            obj = self._inspector.create_object(self._pos)
+            if obj.page_name:
+                self._ctrl.doc.doCommand(ObjAddCmd(obj))
+                event.handled = True
+
+
+class SheetRefEditor(BaseEditor):
+    """Edit position and target fields of an existing sheet reference."""
+
+    def __init__(self, ctrl, obj):
+        super().__init__(ctrl, obj)
+        self._inspector = SheetRefInspector(obj)
+        self._inspector.changed.connect(self._commit)
+
+    def create_handles(self):
+        self._handles = [EditHandle(self._ctrl, self._obj.pos)]
+
+    def _setup_handle_connections(self):
+        self._handles[0].sigDragged.connect(self._drag)
+        self._handles[0].sigMoved.connect(self._commit)
+
+    def update_handles(self):
+        self._handles[0].pos = self._obj.pos
+
+    @Slot('QPoint')
+    def _drag(self, pos):
+        self._obj.pos = pos
+        self.sigUpdate.emit()
+
+    def draw_custom(self, painter):
+        painter.drawRect(self._obj.bbox())
+
+    def handle_custom_event(self, event):
+        super().handle_custom_event(event)
+        if event.handled:
+            return
+        from sch.view import Event
+        if event.evType == Event.Type.KeyPressed:
+            if event.key == Qt.Key_R:
+                self._obj.rot = self._obj.rot + 90
+                self._commit()
+                event.handled = True
+            elif event.key == Qt.Key_V:
+                self._obj.mirror = not self._obj.mirror
+                self._commit()
+                event.handled = True

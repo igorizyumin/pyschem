@@ -30,7 +30,10 @@ class PartObj(object):
         self._master = None
         self._path = path
         self._name = name
-        self.path = None
+        # Preserve the constructor's library path.  Clearing it here makes
+        # newly-created parts serialize with a null ``schPath`` and prevents
+        # valid part instances from round-tripping.
+        self.path = path
         self._rot = None
         self._mirror = None
         self._pos = None
@@ -114,15 +117,16 @@ class PartObj(object):
 
     def _initProperties(self):
         """Initialize properties from master symbol templates."""
-        if self._master is not None:
-            templates = self._master.property_templates
-            self._properties = sch.obj.property.PartPropertyStore(templates)
-            # Apply any overrides that were parsed from XML
-            if hasattr(self, '_overrides_to_apply'):
-                for name, value in self._overrides_to_apply.items():
+        templates = self._master.property_templates if self._master is not None else []
+        self._properties = sch.obj.property.PartPropertyStore(templates)
+        # Apply any overrides that were parsed from XML.  Unknown overrides
+        # are retained only when a master is available; the property store
+        # intentionally rejects names that are not defined by that master.
+        if hasattr(self, '_overrides_to_apply'):
+            for name, value in self._overrides_to_apply.items():
+                if name in self._properties.names():
                     self._properties.set(name, value)
-                # Clear after applying
-                del self._overrides_to_apply
+            del self._overrides_to_apply
 
     def _updateMaster(self):
         self._master = self._lib.getSym(self.path, self.name)

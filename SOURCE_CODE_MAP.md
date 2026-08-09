@@ -1,6 +1,6 @@
 # PySchem Source Code Map
 
-This document provides a comprehensive map of all classes, their locations, and their responsibilities within the PySchem project.
+This document provides a current map of the implemented classes, their locations, and their responsibilities. It is not a plugin/API specification; planned features are tracked in `PLAN.md` and `TODO.md`.
 
 ---
 
@@ -33,13 +33,14 @@ This document provides a comprehensive map of all classes, their locations, and 
 | `ObjAddCmd` | Command to add an object to a document. |
 | `ObjDelCmd` | Command to delete an object from a document. |
 | `ObjChangeCmd` | Command to modify an object's properties. |
+| `AbstractPage` | Page-owned object collection and `QUndoStack` lifecycle. |
+| `SymbolPage` | Symbol master page with property templates and symbol objects. |
 
 ### sch/library.py
 
 | Class | Description |
 |-------|-------------|
 | `PartLibrary` | Stores part symbols and manages their loading from external files. Provides lookup by symbol name. |
-| `DocumentManager` | Manages loading and saving of schematic documents. |
 
 ### sch/utils.py
 
@@ -47,6 +48,22 @@ This document provides a comprehensive map of all classes, their locations, and 
 |-------|-------------|
 | `Layer` | Provides access to layer colors and properties for rendering. |
 | `LayerType` | Enumerates available drawing layers (wire, annotate, selection, etc.). |
+
+### sch/obj/property.py
+
+| Class | Description |
+|-------|-------------|
+| `PropertyTemplate` | Symbol-level default property definition. |
+| `Property` | A resolved property value, either default or overridden. |
+| `PartPropertyStore` | Stores instance overrides against symbol templates. |
+
+### sch/obj/sheetref.py and sch/obj/port.py
+
+| Class | Description |
+|-------|-------------|
+| `SheetRefObj` | First-class hierarchical child-sheet reference with XML persistence and target resolution. |
+| `Port` | Port record attached to a sheet reference, including direction and bus metadata. |
+| `PortDirection` | Enumerated port direction values. |
 | `Geom` | Geometric utility functions (norm, dotProd, isParallel, etc.). |
 | `Point` | Point type utilities. |
 
@@ -277,11 +294,11 @@ These classes are auto-generated from Qt Designer `.ui` files. They provide the 
 3. **Object Creation** → Tool creates Object → Document.add()
 4. **Object Editing** → Select Tool → Editor → Object modification
 5. **Rendering** → View renders Document objects
-6. **Undo/Redo** → Commands (ObjAddCmd, ObjDelCmd, ObjChangeCmd)
+6. **Undo/Redo** → Page-owned commands, including `NetGraphCmd` for normalized net graphs.
 
 ### Key Design Patterns
 
-- **MVC Pattern**: Model (Document/Objects), View (GraphicsView), Controller (Controller)
+- **MVC-like Pattern**: Model (Document/Objects), View (`SchView`), Controller (`Controller`)
 - **Command Pattern**: Undo/redo via command objects
 - **Tool Pattern**: Different tools for different operations
 - **Editor Pattern**: Object-specific editors for modification
@@ -294,7 +311,7 @@ These classes are auto-generated from Qt Designer `.ui` files. They provide the 
 | Directory | Files | Primary Purpose |
 |-----------|-------|-----------------|
 | `sch/` | controller.py, document.py, library.py, utils.py, view.py | Core application components |
-| `sch/obj/` | 8 files | Object model classes |
+| `sch/obj/` | 10 files | Object model classes |
 | `sch/tools/` | 8 files | Interactive tools and editors |
 | `sch/forms/` | 4 files | Dockable form widgets |
 | `sch/uic/` | 7 files | Auto-generated Qt UI classes |
@@ -303,4 +320,6 @@ These classes are auto-generated from Qt Designer `.ui` files. They provide the 
 
 ---
 
-*Generated for PySchem schematic capture application*
+*Decision: this map is maintained manually. Structural changes should update it
+in the same change; it is intentionally not generated because the descriptions
+include architectural roles that cannot be inferred reliably from module names.*

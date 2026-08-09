@@ -5,6 +5,7 @@ import sch.controller
 from sch.utils import LayerType, Layer
 from sch.obj.net import NetObj
 from sch.tools.base import EditHandle, BaseEditor
+from sch.tools.drag import DragController
 from sch.view import Event
 
 import os
@@ -127,21 +128,151 @@ class NetGraphCmd(sch.document.BaseUndoCmd):
         self._replace(self._after, self._before)
 
 
-class NetDragSession:
-    """Immutable preview transaction for moving a net endpoint/junction."""
+class NetDragSession(DragController):
+    """Immutable preview transaction for moving a net.
 
-    def __init__(self, nets, selected, handle_index):
-        self._source = list(nets)
-        self._baseline = [NetObj(net.pt1, net.pt2) for net in self._source]
+    In the default orthogonal mode, horizontal and vertical segments move
+    along their own axes; short orthogonal connectors preserve connectivity
+    when a junction moves in the other axis.  Free mode (used by Shift) moves
+    every attached endpoint by the complete cursor delta.  Interior crossings
+    are deliberately not treated as connections.
+    """
+
+    def __init__(self, nets, selected, handle_index=None, grab_point=None,
+                 orthogonal=True):
+        source = list(nets)
         self._selected_index = next(
-            index for index, net in enumerate(self._source) if net is selected)
-        selected_net = self._baseline[self._selected_index]
-        self._anchor = selected_net.pt1 if handle_index == 0 else selected_net.pt2
+            index for index, net in enumerate(source) if net is selected)
+        selected_net = source[self._selected_index]
+        self._orthogonal = bool(orthogonal)
+        if handle_index is None:
+            if grab_point is None:
+                raise ValueError("segment drags require a grab point")
+            self._mode = "segment"
+            self._anchor = QPoint(grab_point)
+            self._moved_points = self._unique_points(
+                (selected_net.pt1, selected_net.pt2))
+        else:
+            if handle_index not in (0, 1):
+                raise ValueError("handle_index must be 0 or 1")
+            self._mode = "endpoint"
+            self._anchor = selected_net.pt1 if handle_index == 0 else selected_net.pt2
+            self._moved_points = (QPoint(self._anchor),)
         self._affected = tuple(
-            index for index, net in enumerate(self._baseline)
-            if net.pt1 == self._anchor or net.pt2 == self._anchor)
-        self._preview = list(self._baseline)
+            index for index, net in enumerate(source)
+            if any(net.pt1 == point or net.pt2 == point
+                   for point in self._moved_points))
         self._cursor = QPoint(self._anchor)
+        self._effective_cursor = QPoint(self._anchor)
+        self._preview_additions = ()
+        super().__init__(source, source, self._build_preview)
+
+    @staticmethod
+    def _unique_points(points):
+        result = []
+        for point in points:
+            if not any(point == existing for existing in result):
+                result.append(QPoint(point))
+        return tuple(result)
+
+    @classmethod
+    def for_segment(cls, nets, selected, grab_point, orthogonal=True):
+        """Create a session for grabbing the body of ``selected``."""
+        return cls(nets, selected, grab_point=grab_point,
+                   orthogonal=orthogonal)
+
+    @property
+    def mode(self):
+        return self._mode
+
+    @property
+    def orthogonal(self):
+        return self._orthogonal
+
+    def set_orthogonal(self, orthogonal):
+        """Change drag constraint mode without changing the baseline graph."""
+        self._orthogonal = bool(orthogonal)
+
+    @property
+    def moved_points(self):
+        return tuple(QPoint(point) for point in self._moved_points)
+
+    @property
+    def moved(self):
+        return self._effective_cursor != self._anchor
+
+    @staticmethod
+    def _axis(net):
+        if net.pt1.y() == net.pt2.y():
+            return "horizontal"
+        if net.pt1.x() == net.pt2.x():
+            return "vertical"
+        return None
+
+    def _effective_cursor_for(self, baseline, cursor):
+        # The cursor remains the requested vertex position.  Orthogonal mode
+        # preserves each affected H/V segment by moving its endpoint along
+        # its own axis and adding a short orthogonal connector to the cursor.
+        return QPoint(cursor)
+
+    def _preserved_endpoint(self, net, old_point, new_point):
+        if not self._orthogonal:
+            return QPoint(new_point)
+        axis = self._axis(net)
+        if axis == "horizontal":
+            return QPoint(new_point.x(), old_point.y())
+        if axis == "vertical":
+            return QPoint(old_point.x(), new_point.y())
+        return QPoint(new_point)
+
+    @staticmethod
+    def _segment_key(net):
+        first = (net.pt1.x(), net.pt1.y())
+        second = (net.pt2.x(), net.pt2.y())
+        return (first, second) if first <= second else (second, first)
+
+    def _build_preview(self, baseline, cursor):
+        self._effective_cursor = self._effective_cursor_for(baseline, cursor)
+        offset = self._effective_cursor - self._anchor
+        moved_points = {
+            (point.x(), point.y()): point + offset
+            for point in self._moved_points
+        }
+        preview = []
+        additions = []
+        addition_keys = set()
+        affected = set(self._affected)
+        for index, net in enumerate(baseline):
+            if self._mode == "segment" and index == self._selected_index:
+                preview.append(net.translated(offset))
+                continue
+            if index not in affected:
+                preview.append(net)
+                continue
+            pt1 = net.pt1
+            pt2 = net.pt2
+            for endpoint_name in ("pt1", "pt2"):
+                endpoint = getattr(net, endpoint_name)
+                moved = moved_points.get((endpoint.x(), endpoint.y()))
+                if moved is None:
+                    continue
+                if self._mode == "segment" and index == self._selected_index:
+                    replacement = moved
+                else:
+                    replacement = self._preserved_endpoint(net, endpoint, moved)
+                    if replacement != moved:
+                        connector = NetObj(replacement, moved)
+                        key = self._segment_key(connector)
+                        if connector.pt1 != connector.pt2 and key not in addition_keys:
+                            addition_keys.add(key)
+                            additions.append(connector)
+                if endpoint_name == "pt1":
+                    pt1 = replacement
+                else:
+                    pt2 = replacement
+            preview.append(net.with_endpoints(pt1, pt2))
+        self._preview_additions = tuple(additions)
+        return preview + additions
 
     @property
     def source(self):
@@ -161,26 +292,19 @@ class NetDragSession:
 
     @property
     def preview(self):
-        return list(self._preview)
+        return super().preview
+
+    @property
+    def preview_additions(self):
+        return list(self._preview_additions)
 
     @property
     def selected_preview(self):
-        return self._preview[self._selected_index]
+        return self.preview[self._selected_index]
 
     def update(self, cursor):
         self._cursor = QPoint(cursor)
-        offset = self._cursor - self._anchor
-        preview = []
-        affected = set(self._affected)
-        for index, net in enumerate(self._baseline):
-            if index not in affected:
-                preview.append(net)
-                continue
-            pt1 = net.pt1 + offset if net.pt1 == self._anchor else net.pt1
-            pt2 = net.pt2 + offset if net.pt2 == self._anchor else net.pt2
-            preview.append(net.with_endpoints(pt1, pt2))
-        self._preview = preview
-        return self.preview
+        return super().update(self._cursor)
 
 
 class NetEditor(BaseEditor):
@@ -201,6 +325,21 @@ class NetEditor(BaseEditor):
     def create_handles(self):
         """Create edit handles for net endpoints."""
         self._handles = [EditHandle(self._ctrl, self._obj.pt1), EditHandle(self._ctrl, self._obj.pt2)]
+
+    def _hit_radius(self):
+        view = getattr(self._ctrl, "view", None)
+        if view is not None and hasattr(view, "hitRadius"):
+            return view.hitRadius()
+        return 1
+
+    def _snap(self, pos):
+        snap = getattr(self._ctrl, "snapPt", None)
+        return QPoint(snap(pos) if snap is not None else pos)
+
+    def testHit(self, pt):
+        """Hit either an endpoint handle or the body of the selected net."""
+        return (super().testHit(pt)
+                or self._obj.testHit(pt, self._hit_radius()))
 
     def _setup_handle_connections(self):
         """Set up specific connections for net handles."""
@@ -302,28 +441,85 @@ class NetEditor(BaseEditor):
             net = self._drag.preview[index]
             if net.pt1 != net.pt2:
                 painter.drawLine(net.pt1, net.pt2)
+        for net in self._drag.preview_additions:
+            if net.pt1 != net.pt2:
+                painter.drawLine(net.pt1, net.pt2)
 
-    def _begin_drag(self, handle_index, pos):
+    def _begin_drag(self, handle_index, pos, orthogonal=True):
         if self._drag is None:
             self._drag = NetDragSession(
-                self._ctrl.doc.objects(objType=NetObj), self._obj, handle_index)
+                self._ctrl.doc.objects(objType=NetObj), self._obj, handle_index,
+                orthogonal=orthogonal)
+        elif self._drag.mode == "endpoint":
+            self._drag.set_orthogonal(orthogonal)
         self._drag.update(pos)
         self.update_handles()
+
+    def _begin_segment_drag(self, pos, orthogonal=True):
+        """Start or update a drag that grabbed the body of the net."""
+        snapped = self._snap(pos)
+        if self._drag is None:
+            self._drag = NetDragSession.for_segment(
+                self._ctrl.doc.objects(objType=NetObj), self._obj, snapped,
+                orthogonal=orthogonal)
+        elif self._drag.mode == "segment":
+            self._drag.set_orthogonal(orthogonal)
+        self._drag.update(snapped)
+        self.update_handles()
+
+    def _dragSegment(self, pos):
+        self._begin_segment_drag(pos)
+        self.sigUpdate.emit()
 
     @Slot('QPoint')
     def _dragPt1(self, pos):
         """Handle dragging of pt1 - move connected segments."""
-        self._begin_drag(0, pos)
+        orthogonal = not bool(self._handles[0].modifiers & Qt.ShiftModifier)
+        self._begin_drag(0, pos, orthogonal=orthogonal)
         self.sigUpdate.emit()
 
     @Slot('QPoint')
     def _dragPt2(self, pos):
         """Handle dragging of pt2 - move connected segments."""
-        self._begin_drag(1, pos)
+        orthogonal = not bool(self._handles[1].modifiers & Qt.ShiftModifier)
+        self._begin_drag(1, pos, orthogonal=orthogonal)
         self.sigUpdate.emit()
 
     def handle_custom_event(self, event):
-        """Net editor doesn't handle custom events currently."""
+        """Handle dragging from the body of a wire, away from its handles."""
+        if event.evType == sch.controller.Event.Type.MousePressed:
+            # Endpoint handles get first refusal in BaseEditor.handleEvent.
+            # The explicit check also keeps this method safe when called
+            # directly by a test or another editor.
+            if (event.pos is not None
+                    and not any(handle.testHit(event.pos)
+                                for handle in self._handles)
+                    and self._obj.testHit(event.pos, self._hit_radius())):
+                orthogonal = not bool(event.modifiers & Qt.ShiftModifier)
+                self._begin_segment_drag(event.pos, orthogonal=orthogonal)
+                self.sigUpdate.emit()
+                event.handled = True
+                return
+        elif event.evType == sch.controller.Event.Type.MouseMoved:
+            if self._drag is not None and self._drag.mode == "segment":
+                orthogonal = not bool(event.modifiers & Qt.ShiftModifier)
+                self._begin_segment_drag(event.pos, orthogonal=orthogonal)
+                self.sigUpdate.emit()
+                event.handled = True
+                return
+        elif event.evType == sch.controller.Event.Type.MouseReleased:
+            if self._drag is not None and self._drag.mode == "segment":
+                orthogonal = not bool(event.modifiers & Qt.ShiftModifier)
+                self._begin_segment_drag(event.pos, orthogonal=orthogonal)
+                moved = self._drag.moved
+                if moved:
+                    self._commit()
+                else:
+                    self._drag = None
+                    self.update_handles()
+                    self.sigUpdate.emit()
+                event.handled = True
+                return
         if event.evType == sch.controller.Event.Type.Cancel and self._drag is not None:
             self._drag = None
             self.update_handles()

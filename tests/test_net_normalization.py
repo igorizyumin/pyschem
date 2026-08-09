@@ -2,11 +2,6 @@
 
 import unittest
 from PySide6.QtCore import QPoint
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 from sch.obj.net import NetObj
 from sch.utils import Geom

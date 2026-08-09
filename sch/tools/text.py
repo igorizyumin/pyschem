@@ -1,7 +1,7 @@
 from PySide6.QtCore import *
 from PySide6.QtGui import *
 from PySide6.QtWidgets import QWidget
-from PySide6.QtCore import Signal, Slot
+from PySide6.QtCore import Signal, Slot, QSignalBlocker
 from sch.utils import *
 import sch.controller
 import sch.document
@@ -118,30 +118,48 @@ class TextInspector(QWidget):
         self._loadProperties(new)
 
     def _loadProperties(self, obj: sch.obj.text.TextObj):
-        self.ui.text.setText(obj.text)
-        if obj.alignment & Qt.AlignLeft:
-            if obj.alignment & Qt.AlignTop:
-                self.ui.btnTopLeft.setChecked(True)
-            elif obj.alignment & Qt.AlignBottom:
-                self.ui.btnBotLeft.setChecked(True)
-            else:
-                self.ui.btnMidLeft.setChecked(True)
-        elif obj.alignment & Qt.AlignRight:
-            if obj.alignment & Qt.AlignTop:
-                self.ui.btnTopRight.setChecked(True)
-            elif obj.alignment & Qt.AlignBottom:
-                self.ui.btnBotRight.setChecked(True)
-            else:
-                self.ui.btnMidRight.setChecked(True)
+        blockers = [QSignalBlocker(widget) for widget in
+                    (self.ui.text, self.ui.alignGroup, self.ui.fontFace, self.ui.fontSize)]
+        mixed = ""
+        self.ui.text.setPlaceholderText("(mixed)" if obj.text is None else "")
+        self.ui.text.setText(mixed if obj.text is None else obj.text)
+        if obj.alignment is None:
+            self.ui.alignGroup.setExclusive(False)
+            for button in self.ui.alignGroup.buttons():
+                button.setChecked(False)
+            self.ui.alignGroup.setExclusive(True)
         else:
-            if obj.alignment & Qt.AlignTop:
-                self.ui.btnTopCtr.setChecked(True)
-            elif obj.alignment & Qt.AlignBottom:
-                self.ui.btnBotCtr.setChecked(True)
+            if obj.alignment & Qt.AlignLeft:
+                if obj.alignment & Qt.AlignTop:
+                    self.ui.btnTopLeft.setChecked(True)
+                elif obj.alignment & Qt.AlignBottom:
+                    self.ui.btnBotLeft.setChecked(True)
+                else:
+                    self.ui.btnMidLeft.setChecked(True)
+            elif obj.alignment & Qt.AlignRight:
+                if obj.alignment & Qt.AlignTop:
+                    self.ui.btnTopRight.setChecked(True)
+                elif obj.alignment & Qt.AlignBottom:
+                    self.ui.btnBotRight.setChecked(True)
+                else:
+                    self.ui.btnMidRight.setChecked(True)
             else:
-                self.ui.btnMidCtr.setChecked(True)
-        self.ui.fontFace.setCurrentText(obj.family)
-        self.ui.fontSize.setCurrentText("{:g}".format(obj.ptSize/500))
+                if obj.alignment & Qt.AlignTop:
+                    self.ui.btnTopCtr.setChecked(True)
+                elif obj.alignment & Qt.AlignBottom:
+                    self.ui.btnBotCtr.setChecked(True)
+                else:
+                    self.ui.btnMidCtr.setChecked(True)
+        if obj.family is None:
+            self.ui.fontFace.setCurrentIndex(-1)
+            self.ui.fontFace.setEditText("(mixed)")
+        else:
+            self.ui.fontFace.setCurrentText(obj.family)
+        if obj.ptSize is None:
+            self.ui.fontSize.setCurrentIndex(-1)
+            self.ui.fontSize.setEditText("(mixed)")
+        else:
+            self.ui.fontSize.setCurrentText("{:g}".format(obj.ptSize/500))
 
     @Slot(int)
     def on_alignGroup_idClicked(self, id):

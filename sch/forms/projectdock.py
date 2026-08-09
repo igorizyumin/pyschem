@@ -5,6 +5,14 @@ from sch.uic.ui_projectdock import Ui_ProjectDock
 from sch.document import MasterDocument, DocPage
 from sch.forms.treeutils import AbstractTreeNode, AbstractTreeModel
 from sch.obj.sheetref import SheetRefObj
+from pathlib import Path
+
+
+def _page_key(page):
+    file_name = getattr(page.parentDoc, "fileName", None)
+    if file_name:
+        return f"{Path(file_name).resolve()}::{page.name}"
+    return f"memory:{id(page.parentDoc)}::{page.name}"
 
 
 class ProjectDock(QDockWidget):
@@ -23,7 +31,7 @@ class ProjectDock(QDockWidget):
     class SheetRefElement(object):
         """Element representing a sheet reference with its child page."""
         
-        def __init__(self, sheet_ref: SheetRefObj, parent_element):
+        def __init__(self, sheet_ref: SheetRefObj, parent_element, visited=None):
             self.sheet_ref = sheet_ref
             self._parent_element = parent_element
             
@@ -39,10 +47,18 @@ class ProjectDock(QDockWidget):
                 self.name = f"└ SheetRef (no name)"
             
             self.subelements = []
-            if self.resolved_page is not None:
+            if self.resolved_page is not None and _page_key(self.resolved_page) not in (visited or set()):
+                next_visited = set(visited or ())
+                next_visited.add(_page_key(self.resolved_page))
                 # Add sheet references from the child page
                 for child_sheet_ref in self.resolved_page.sheetReferences():
-                    self.subelements.append(ProjectDock.SheetRefElement(child_sheet_ref, self))
+                    self.subelements.append(ProjectDock.SheetRefElement(
+                        child_sheet_ref, self, next_visited
+                    ))
+            elif self.resolved_page is None and sheet_ref.resolution_error:
+                self.name += f" (unresolved: {sheet_ref.resolution_error})"
+            elif self.resolved_page is not None:
+                self.name += " (cycle)"
 
         @property
         def doc(self):
@@ -61,8 +77,11 @@ class ProjectDock(QDockWidget):
             self.subelements = []
             
             # Add sheet references as children
+            visited = {_page_key(page)}
             for sheet_ref in page.sheetReferences():
-                self.subelements.append(ProjectDock.SheetRefElement(sheet_ref, self))
+                self.subelements.append(ProjectDock.SheetRefElement(
+                    sheet_ref, self, visited
+                ))
 
     class DocElement(QObject):
         """Element representing a document containing symbols and pages."""
@@ -71,6 +90,7 @@ class ProjectDock(QDockWidget):
             super().__init__()
             self._doc = doc
             doc.sigChanged.connect(self.onDocChanged)
+            doc.sigCleanChanged.connect(self.onDocChanged)
             self.name = None
             self.subelements = []
             self.onDocChanged()

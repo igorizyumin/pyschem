@@ -1,7 +1,7 @@
 from PySide6.QtCore import *
 from PySide6.QtGui import *
 from PySide6.QtWidgets import QWidget
-from PySide6.QtCore import Signal, Slot
+from PySide6.QtCore import Signal, Slot, QSignalBlocker
 from sch.utils import *
 import sch.controller
 import sch.document
@@ -116,11 +116,28 @@ class PropTextInspector(QWidget):
         self._loadProperties(new)
 
     def _loadProperties(self, obj: sch.obj.proptext.PropTextObj):
-        self.ui.cbProp.setCurrentText(obj.name)
-        self.ui.leValue.setText(obj.value)
-        self.ui.cbVis.setChecked(obj.vis)
-        self.ui.cbShowName.setChecked(obj.showName)
-        if obj.alignment & Qt.AlignLeft:
+        blockers = [QSignalBlocker(widget) for widget in
+                    (self.ui.cbProp, self.ui.leValue, self.ui.cbVis,
+                     self.ui.cbShowName, self.ui.alignGroup,
+                     self.ui.fontFace, self.ui.fontSize)]
+        if obj.name is None:
+            self.ui.cbProp.setCurrentIndex(-1)
+        else:
+            self.ui.cbProp.setCurrentText(obj.name)
+        self.ui.leValue.setPlaceholderText("(mixed)" if obj.value is None else "")
+        self.ui.leValue.setText("" if obj.value is None else obj.value)
+        self.ui.cbVis.setTristate(obj.vis is None)
+        self.ui.cbVis.setCheckState(Qt.PartiallyChecked if obj.vis is None else
+                                    (Qt.Checked if obj.vis else Qt.Unchecked))
+        self.ui.cbShowName.setTristate(obj.showName is None)
+        self.ui.cbShowName.setCheckState(Qt.PartiallyChecked if obj.showName is None else
+                                         (Qt.Checked if obj.showName else Qt.Unchecked))
+        if obj.alignment is None:
+            self.ui.alignGroup.setExclusive(False)
+            for button in self.ui.alignGroup.buttons():
+                button.setChecked(False)
+            self.ui.alignGroup.setExclusive(True)
+        elif obj.alignment & Qt.AlignLeft:
             if obj.alignment & Qt.AlignTop:
                 self.ui.btnTopLeft.setChecked(True)
             elif obj.alignment & Qt.AlignBottom:
@@ -141,8 +158,16 @@ class PropTextInspector(QWidget):
                 self.ui.btnBotCtr.setChecked(True)
             else:
                 self.ui.btnMidCtr.setChecked(True)
-        self.ui.fontFace.setCurrentText(obj.family)
-        self.ui.fontSize.setCurrentText("{:g}".format(obj.ptSize/500))
+        if obj.family is None:
+            self.ui.fontFace.setCurrentIndex(-1)
+            self.ui.fontFace.setEditText("(mixed)")
+        else:
+            self.ui.fontFace.setCurrentText(obj.family)
+        if obj.ptSize is None:
+            self.ui.fontSize.setCurrentIndex(-1)
+            self.ui.fontSize.setEditText("(mixed)")
+        else:
+            self.ui.fontSize.setCurrentText("{:g}".format(obj.ptSize/500))
 
     @Slot(int)
     def on_alignGroup_buttonClicked(self, id):
