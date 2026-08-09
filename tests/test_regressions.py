@@ -468,6 +468,18 @@ class TestNetSegmentDrag(unittest.TestCase):
         self.assertEqual(self._coords(session.preview[1]), (10, 5, 10, 10))
         self.assertEqual(self._coords(session.preview[2]), (30, 0, 30, 10))
 
+    def test_segment_drag_removes_a_collapsed_perpendicular_branch(self):
+        selected = NetObj(QPoint(0, 0), QPoint(10, 0))
+        branch = NetObj(QPoint(10, 0), QPoint(10, 5))
+        session = NetDragSession.for_segment(
+            [selected, branch], selected, QPoint(5, 0))
+
+        session.update(QPoint(5, 5))
+
+        self.assertEqual(self._coords(session.preview[0]), (0, 5, 10, 5))
+        self.assertEqual(
+            len([net for net in session.preview if net.pt1 != net.pt2]), 1)
+
     def test_default_segment_drag_preserves_a_t_shape_with_a_stretched_stem(self):
         left = NetObj(QPoint(0, 0), QPoint(10, 0))
         right = NetObj(QPoint(10, 0), QPoint(20, 0))
@@ -480,23 +492,91 @@ class TestNetSegmentDrag(unittest.TestCase):
         self.assertEqual(self._coords(session.preview[0]), (0, 5, 10, 5))
         self.assertEqual(self._coords(session.preview[1]), (10, 0, 20, 0))
         self.assertEqual(self._coords(session.preview[2]), (10, 5, 10, -10))
-        self.assertIn(NetObj(QPoint(10, 0), QPoint(10, 5)),
-                      session.preview_additions)
+        self.assertNotIn(NetObj(QPoint(10, 0), QPoint(10, 5)),
+                         session.preview_additions)
 
-    def test_default_vertex_drag_keeps_attached_segments_orthogonal(self):
+    def test_diagonal_segment_drag_does_not_create_a_t_junction_loop(self):
+        left = NetObj(QPoint(0, 0), QPoint(10, 0))
+        right = NetObj(QPoint(10, 0), QPoint(20, 0))
+        stem = NetObj(QPoint(10, 0), QPoint(10, -10))
+        session = NetDragSession.for_segment(
+            [left, right, stem], left, QPoint(5, 0))
+
+        session.update(QPoint(7, 4))
+
+        self.assertEqual(self._coords(session.preview[0]), (2, 4, 12, 4))
+        self.assertEqual(self._coords(session.preview[1]), (10, 0, 20, 0))
+        self.assertEqual(self._coords(session.preview[2]), (10, 4, 10, -10))
+        self.assertNotIn(NetObj(QPoint(10, 0), QPoint(10, 4)),
+                         session.preview_additions)
+        self.assertNotIn(NetObj(QPoint(10, 4), QPoint(12, 4)),
+                         session.preview_additions)
+
+    def test_segment_dragging_a_jog_does_not_add_a_covered_connector(self):
+        lower = NetObj(QPoint(0, 0), QPoint(10, 0))
+        riser = NetObj(QPoint(10, 0), QPoint(10, 10))
+        upper = NetObj(QPoint(10, 10), QPoint(20, 10))
+        session = NetDragSession.for_segment(
+            [lower, riser, upper], upper, QPoint(15, 10))
+
+        session.update(QPoint(5, 10))
+
+        self.assertEqual(session.preview_additions, [])
+        self.assertEqual(self._coords(session.preview[2]), (0, 10, 10, 10))
+
+    def test_t_arm_drag_to_stem_endpoint_does_not_extend_the_stem(self):
+        left = NetObj(QPoint(0, 0), QPoint(10, 0))
+        right = NetObj(QPoint(10, 0), QPoint(20, 0))
+        stem = NetObj(QPoint(10, 0), QPoint(10, -10))
+        session = NetDragSession.for_segment(
+            [left, right, stem], right, QPoint(15, 0))
+
+        session.update(QPoint(15, -10))
+
+        self.assertEqual(self._coords(session.preview[1]), (10, -10, 20, -10))
+        self.assertEqual(self._coords(session.preview[2]), (10, 0, 10, -10))
+        self.assertEqual(session.preview_additions, [])
+
+    def test_jog_arm_drag_to_other_horizontal_does_not_restore_the_riser(self):
+        bottom = NetObj(QPoint(0, 0), QPoint(10, 0))
+        riser = NetObj(QPoint(10, 0), QPoint(10, 10))
+        top = NetObj(QPoint(10, 10), QPoint(20, 10))
+        session = NetDragSession.for_segment(
+            [bottom, riser, top], top, QPoint(15, 10))
+
+        session.update(QPoint(15, 0))
+
+        self.assertEqual(self._coords(session.preview[0]), (0, 0, 10, 0))
+        self.assertEqual(self._coords(session.preview[2]), (10, 0, 20, 0))
+        self.assertEqual(
+            len([net for net in session.preview if net.pt1 != net.pt2]), 2)
+        self.assertEqual(session.preview_additions, [])
+
+    def test_default_perpendicular_vertex_drag_behaves_like_body_drag(self):
         selected = NetObj(QPoint(0, 0), QPoint(10, 0))
         branch = NetObj(QPoint(0, 0), QPoint(0, 10))
         session = NetDragSession(
             [selected, branch], selected, handle_index=0)
 
+        session.update(QPoint(0, 5))
+
+        self.assertEqual(self._coords(session.preview[0]), (0, 5, 10, 5))
+        self.assertEqual(self._coords(session.preview[1]), (0, 5, 0, 10))
+        self.assertEqual(session.preview_additions, [])
+
+    def test_diagonal_endpoint_drag_keeps_the_opposite_endpoint_fixed(self):
+        selected = NetObj(QPoint(0, 0), QPoint(10, 0))
+        branch = NetObj(QPoint(0, 0), QPoint(0, 10))
+        opposite_branch = NetObj(QPoint(10, 0), QPoint(10, 10))
+        session = NetDragSession(
+            [selected, branch, opposite_branch], selected, handle_index=0)
+
         session.update(QPoint(5, 5))
 
-        self.assertEqual(self._coords(session.preview[0]), (5, 0, 10, 0))
-        self.assertEqual(self._coords(session.preview[1]), (0, 5, 0, 10))
-        self.assertIn(NetObj(QPoint(5, 0), QPoint(5, 5)),
-                      session.preview_additions)
-        self.assertIn(NetObj(QPoint(0, 5), QPoint(5, 5)),
-                      session.preview_additions)
+        self.assertEqual(self._coords(session.preview[0]), (5, 5, 10, 5))
+        self.assertEqual(self._coords(session.preview[1]), (5, 5, 5, 10))
+        self.assertEqual(self._coords(session.preview[2]), (10, 5, 10, 10))
+        self.assertEqual(session.preview_additions, [])
 
     def test_shift_segment_drag_restores_free_endpoint_stretching(self):
         left = NetObj(QPoint(0, 0), QPoint(10, 0))
@@ -564,6 +644,57 @@ class TestNetSegmentDrag(unittest.TestCase):
         self.assertEqual(self._coords(session.selected_preview), (2, 3, 12, 3))
         self.assertEqual(self._coords(session.preview[2]), (12, 3, 15, 0))
 
+    def test_perpendicular_endpoint_drag_behaves_like_body_drag(self):
+        selected = NetObj(QPoint(0, 0), QPoint(10, 0))
+        branch = NetObj(QPoint(10, 0), QPoint(10, 10))
+        session = NetDragSession(
+            [selected, branch], selected, handle_index=1)
+
+        session.update(QPoint(10, 5))
+
+        self.assertEqual(self._coords(session.preview[0]), (0, 5, 10, 5))
+        self.assertEqual(self._coords(session.preview[1]), (10, 5, 10, 10))
+        self.assertEqual(session.preview_additions, [])
+
+    def test_parallel_endpoint_drag_still_stretches_the_selected_wire(self):
+        selected = NetObj(QPoint(0, 0), QPoint(10, 0))
+        branch = NetObj(QPoint(10, 0), QPoint(10, 10))
+        session = NetDragSession(
+            [selected, branch], selected, handle_index=1)
+
+        session.update(QPoint(15, 0))
+
+        self.assertEqual(self._coords(session.preview[0]), (0, 0, 15, 0))
+        self.assertEqual(self._coords(session.preview[1]), (10, 0, 10, 10))
+        self.assertNotIn(NetObj(QPoint(10, 0), QPoint(15, 0)),
+                         session.preview_additions)
+
+    def test_shift_perpendicular_endpoint_drag_remains_free_form(self):
+        selected = NetObj(QPoint(0, 0), QPoint(10, 0))
+        branch = NetObj(QPoint(10, 0), QPoint(10, 10))
+        session = NetDragSession(
+            [selected, branch], selected, handle_index=1,
+            orthogonal=False)
+
+        session.update(QPoint(10, 5))
+
+        self.assertEqual(self._coords(session.preview[0]), (0, 0, 10, 5))
+        self.assertEqual(self._coords(session.preview[1]), (10, 5, 10, 10))
+        self.assertEqual(session.preview_additions, [])
+
+    def test_alt_perpendicular_endpoint_drag_moves_only_selected_endpoint(self):
+        selected = NetObj(QPoint(0, 0), QPoint(10, 0))
+        branch = NetObj(QPoint(10, 0), QPoint(10, 10))
+        session = NetDragSession(
+            [selected, branch], selected, handle_index=1,
+            maintain_connectivity=False)
+
+        session.update(QPoint(10, 5))
+
+        self.assertEqual(self._coords(session.preview[0]), (0, 0, 10, 5))
+        self.assertEqual(self._coords(session.preview[1]), (10, 0, 10, 10))
+        self.assertEqual(session.preview_additions, [])
+
     def test_segment_drag_moves_all_branches_at_a_grabbed_junction(self):
         selected = NetObj(QPoint(0, 0), QPoint(10, 0))
         branch_a = NetObj(QPoint(10, 0), QPoint(10, 10))
@@ -609,7 +740,7 @@ class TestNetSegmentDrag(unittest.TestCase):
         self.assertFalse(session.moved)
         self.assertEqual(self._coords(session.selected_preview), (0, 0, 10, 0))
 
-    def test_collapsed_stretched_branch_is_removed_by_commit_normalization(self):
+    def test_collapsed_perpendicular_branch_remains_at_the_far_endpoint(self):
         selected = NetObj(QPoint(0, 0), QPoint(10, 0))
         branch = NetObj(QPoint(10, 0), QPoint(10, 10))
         session = NetDragSession.for_segment(
@@ -619,7 +750,7 @@ class TestNetSegmentDrag(unittest.TestCase):
         normalized = NetObj._normalizeGeometry(session.preview)
 
         self.assertEqual(len(normalized), 1)
-        self.assertEqual(self._coords(normalized[0]), (0, 10, 10, 10))
+        self.assertIn(NetObj(QPoint(0, 10), QPoint(10, 10)), normalized)
 
     def test_mouse_events_start_a_body_drag_and_commit_one_undoable_graph_change(self):
         class View:
@@ -676,6 +807,42 @@ class TestNetSegmentDrag(unittest.TestCase):
         self.assertIn(vertical, page.objects(NetObj))
         page.redo()
         self.assertIn(NetObj(QPoint(0, 5), QPoint(10, 5)), page.objects(NetObj))
+        editor.dispose()
+
+    def test_endpoint_dragging_a_jog_to_alignment_commits_without_rebinding_error(self):
+        class View:
+            @staticmethod
+            def hitRadius():
+                return 1
+
+        class Controller:
+            def __init__(self, page):
+                self.doc = page
+                self.view = View()
+
+            @staticmethod
+            def snapPt(point):
+                return QPoint(point)
+
+        page = DocPage(MasterDocument(None))
+        bottom = NetObj(QPoint(0, 0), QPoint(10, 0))
+        riser = NetObj(QPoint(10, 0), QPoint(10, 10))
+        top = NetObj(QPoint(10, 10), QPoint(20, 10))
+        page.addObj(bottom)
+        page.addObj(riser)
+        page.addObj(top)
+        editor = NetEditor(Controller(page), top)
+
+        editor.handleEvent(Event(Event.Type.MousePressed, QPoint(10, 10)))
+        editor.handleEvent(Event(Event.Type.MouseMoved, QPoint(10, 0)))
+        editor.handleEvent(Event(Event.Type.MouseReleased, QPoint(10, 0)))
+
+        self.assertEqual(page.undoStack.count(), 1)
+        self.assertIn(NetObj(QPoint(0, 0), QPoint(20, 0)),
+                      page.objects(NetObj))
+        self.assertFalse(any(net.pt1.x() == net.pt2.x()
+                             and net.pt1 != net.pt2
+                             for net in page.objects(NetObj)))
         editor.dispose()
 
     def test_shift_modifier_selects_free_body_drag_mode(self):

@@ -100,13 +100,18 @@ class NetObj(object):
 
     @staticmethod
     def drawJunctions(doc, painter: QPainter):
-        NetObj.drawJunctionsForNets(doc.objects(objType=NetObj), painter)
+        connection_points = []
+        if hasattr(doc, "connection_points"):
+            connection_points = doc.connection_points()
+        NetObj.drawJunctionsForNets(
+            doc.objects(objType=NetObj), painter, connection_points)
 
     @staticmethod
-    def drawJunctionsForNets(nets, painter: QPainter):
+    def drawJunctionsForNets(nets, painter: QPainter, connection_points=None):
         painter.setPen(Qt.NoPen)
         painter.setBrush(QBrush(Layer.color(LayerType.junction)))
-        nets = set(nets)
+        all_nets = set(nets)
+        nets = set(all_nets)
         juncts = defaultdict(set)
         while nets:
             n = nets.pop()
@@ -116,9 +121,20 @@ class NetObj(object):
                 if v:
                     juncts[v].add(n)
                     juncts[v].add(n2)
+        drawn = set()
         for pt, nets in juncts.items():
             if len(nets) > 2:
                 painter.drawEllipse(QPoint(pt.x, pt.y), 500, 500)
+                drawn.add((pt.x, pt.y))
+
+        # A pin is an electrical vertex even though it is not represented by
+        # a NetObj.  A wire crossing a pin is split into two segments, so two
+        # incident wire edges are enough to warrant a junction marker here.
+        for point in connection_points or ():
+            incident = [net for net in all_nets
+                        if net.pt1 == point or net.pt2 == point]
+            if len(incident) >= 2 and (point.x(), point.y()) not in drawn:
+                painter.drawEllipse(QPoint(point), 500, 500)
 
     @staticmethod
     def _uniquePoints(points: List[QPoint]) -> List[QPoint]:
@@ -201,15 +217,17 @@ class NetObj(object):
         return count
 
     @staticmethod
-    def _mergeCollinearSegments(segments: List['NetObj'], 
+    def _mergeCollinearSegments(segments: List['NetObj'],
                                  junction_points: Set[QPoint] = None) -> List['NetObj']:
         """Merge edges through degree-two collinear vertices.
 
-        ``junction_points`` remains accepted for compatibility, but topology
-        is derived directly from the edge graph.  A branch (degree > 2) and a
-        corner (degree 2 but non-collinear) are therefore never collapsed.
+        A branch (degree > 2), a corner (degree 2 but non-collinear), and an
+        explicit connection point such as a pin are never collapsed.
         """
         edges = NetObj._deduplicateSegments(segments)
+        protected = {
+            NetObj._pointKey(point) for point in (junction_points or ())
+        }
         while True:
             adjacency = defaultdict(list)
             for index, edge in enumerate(edges):
@@ -219,6 +237,8 @@ class NetObj(object):
             changed = False
             for key, incident in adjacency.items():
                 if len(incident) != 2:
+                    continue
+                if key in protected:
                     continue
                 first, second = edges[incident[0]], edges[incident[1]]
                 vertex = QPoint(*key)
@@ -274,7 +294,9 @@ class NetObj(object):
         all_nets = list(document.objects(objType=NetObj))
         if not moved_nets:
             return all_nets
-        return NetObj._normalizeGeometry(all_nets)
+        points = (document.connection_points()
+                  if hasattr(document, "connection_points") else None)
+        return NetObj._normalizeGeometry(all_nets, points)
 
     @staticmethod
     def normalize_after_move(document, original_net: 'NetObj', new_net: 'NetObj') -> List['NetObj']:
@@ -300,7 +322,9 @@ class NetObj(object):
             replacement.append(net)
         all_nets = replacement
         all_nets.append(new_net)
-        return NetObj._normalizeGeometry(all_nets)
+        points = (document.connection_points()
+                  if hasattr(document, "connection_points") else None)
+        return NetObj._normalizeGeometry(all_nets, points)
 
     @staticmethod
     def normalize_junction_drag(document, junction_point: QPoint, connected_nets: List['NetObj'], 
@@ -326,7 +350,9 @@ class NetObj(object):
                 new_pt2 = new_junction_point if copy_net.pt2 == junction_point else copy_net.pt2
                 copy_net = copy_net.with_endpoints(new_pt1, new_pt2)
             moved.append(copy_net)
-        return NetObj._normalizeGeometry(moved)
+        points = (document.connection_points()
+                  if hasattr(document, "connection_points") else None)
+        return NetObj._normalizeGeometry(moved, points)
 
     @staticmethod
     def _pointKey(point: QPoint) -> Tuple[int, int]:
@@ -353,14 +379,17 @@ class NetObj(object):
         return result
 
     @staticmethod
-    def _normalizeGeometry(nets: List['NetObj']) -> List['NetObj']:
+    def _normalizeGeometry(nets: List['NetObj'], connection_points=None) -> List['NetObj']:
         """Normalize segments as an explicit endpoint/intersection graph.
 
-        Endpoints lying on another segment create graph vertices.  Pure
-        interior crossings do not, preserving schematic crossing semantics.
-        Atomic edges are then merged only through degree-two collinear nodes.
+        Endpoints lying on another segment and explicit connection points
+        (symbol pins) create graph vertices.  Pure interior crossings do not,
+        preserving schematic crossing semantics.  Atomic edges are then
+        merged only through degree-two collinear nodes that are not protected
+        connection points.
         """
         source = [net for net in nets if net.pt1 != net.pt2]
+        connection_points = [QPoint(point) for point in (connection_points or ())]
         atomic = []
         for index, net in enumerate(source):
             split_points = []
@@ -371,8 +400,10 @@ class NetObj(object):
                     split_points.append(other.pt1)
                 if net.touchesPt(other.pt2):
                     split_points.append(other.pt2)
+            split_points.extend(point for point in connection_points
+                                if net.touchesPt(point))
             atomic.extend(NetObj._splitNetAtPoints(net, split_points))
-        return NetObj._mergeCollinearSegments(atomic)
+        return NetObj._mergeCollinearSegments(atomic, connection_points)
 
 
 

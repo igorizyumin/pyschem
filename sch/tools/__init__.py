@@ -8,3 +8,5 @@ from .part import PartTool, PartEditor
 from .text import TextTool, TextEditor
 # Expose PropTextTool and PropTextEditor from proptext module
 from .proptext import PropTextTool, PropTextEditor
+# Expose PinTool and PinEditor from pin module
+from .pin import PinTool, PinEditor

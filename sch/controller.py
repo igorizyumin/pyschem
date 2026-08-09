@@ -8,6 +8,7 @@ import sch.obj.text
 import sch.obj.part
 import sch.tools.select
 import sch.tools.hierarchy
+import sch.tools.pin
 from sch.view import Event
 from sch.utils import Layer, LayerType
 import sch.document
@@ -142,7 +143,10 @@ class Controller(QObject):
                 if preview is None:
                     sch.obj.net.NetObj.drawJunctions(self.doc, painter)
                 else:
-                    sch.obj.net.NetObj.drawJunctionsForNets(preview, painter)
+                    points = (self.doc.connection_points()
+                              if hasattr(self.doc, "connection_points") else None)
+                    sch.obj.net.NetObj.drawJunctionsForNets(
+                        preview, painter, points)
         hidden = ()
         if self._tool is not None and hasattr(self._tool, 'hiddenObjects'):
             hidden = tuple(self._tool.hiddenObjects())
@@ -185,6 +189,8 @@ class SymController(Controller):
 
     @staticmethod
     def tools():
-        return sch.tools.select.SelectTool, sch.tools.line.LineTool, sch.tools.text.TextTool, sch.tools.proptext.PropTextTool
+        return (sch.tools.select.SelectTool, sch.tools.line.LineTool,
+                sch.tools.text.TextTool, sch.tools.proptext.PropTextTool,
+                sch.tools.pin.PinTool)
 
 

@@ -3,6 +3,7 @@ from PySide6.QtGui import QPainter, QTransform
 from typing import List
 import sch.obj.proptext
 import sch.obj.property
+import sch.obj.pin
 from lxml import etree
 import copy
 
@@ -30,6 +31,7 @@ class PartObj(object):
         self._master = None
         self._path = path
         self._name = name
+        self._masterBbox = None
         # Preserve the constructor's library path.  Clearing it here makes
         # newly-created parts serialize with a null ``schPath`` and prevents
         # valid part instances from round-tripping.
@@ -42,9 +44,9 @@ class PartObj(object):
         self.pos = QPoint(pos)
         self.rot = rot
         self.mirror = mirror
-        self._masterBbox = None
         self._proptexts = []
         self._properties: sch.obj.property.PartPropertyStore = None
+        self._doc = None
 
     def children(self) -> List[sch.obj.proptext.PropTextObj]:
         """Get all property text objects associated with this part."""
@@ -103,6 +105,36 @@ class PartObj(object):
     def master(self):
         """Get the master symbol this part is based on."""
         return self._master
+
+    @property
+    def doc(self):
+        return self._doc
+
+    @doc.setter
+    def doc(self, value):
+        self._doc = value
+
+    def pin_positions(self):
+        """Return ``(pin, page_position)`` pairs for this instance."""
+        if self._master is None:
+            return []
+        transform = self.transform()
+        return [(pin, transform.map(pin.pos))
+                for pin in self._master.objects(objType=sch.obj.pin.PinObj)]
+
+    def pins(self):
+        if self._master is None:
+            return []
+        return list(self._master.objects(objType=sch.obj.pin.PinObj))
+
+    def pinPositions(self):
+        """Compatibility alias for callers using the existing Qt-style API."""
+        return self.pin_positions()
+
+    def _pinConnected(self, pin, position):
+        if self._doc is None:
+            return False
+        return pin.is_connected(self._doc, position, owner=self)
 
     @property
     def properties(self) -> sch.obj.property.PartPropertyStore:
@@ -181,7 +213,11 @@ class PartObj(object):
         painter.save()
         painter.setTransform(self._tr, True)
         for obj in self._master.objects(exclude={sch.obj.proptext.PropTextObj}):
-            obj.draw(painter)
+            if isinstance(obj, sch.obj.pin.PinObj):
+                position = self.transform().map(obj.pos)
+                obj.draw(painter, highlight=not self._pinConnected(obj, position))
+            else:
+                obj.draw(painter)
         painter.restore()
 
     def bbox(self):

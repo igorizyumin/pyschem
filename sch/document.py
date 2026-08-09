@@ -11,6 +11,7 @@ import sch.obj.line
 import sch.obj.net
 import sch.obj.text
 import sch.obj.part
+import sch.obj.pin
 import sch.obj.proptext
 import sch.obj.property
 import sch.obj.sheetref
@@ -308,7 +309,11 @@ class DocPage(AbstractPage):
                 self.addSheetReference(obj)
             self.sigChanged.emit()
             return
+        if isinstance(obj, sch.obj.part.PartObj):
+            obj.doc = self
         super().addObj(obj)
+        if isinstance(obj, (sch.obj.part.PartObj, sch.obj.net.NetObj)):
+            self._normalizeNetsForPins()
 
     def removeSheetReference(self, ref: sch.obj.sheetref.SheetRefObj) -> None:
         """
@@ -327,6 +332,36 @@ class DocPage(AbstractPage):
             self.sigChanged.emit()
             return
         super().removeObj(obj)
+        if isinstance(obj, sch.obj.part.PartObj):
+            obj.doc = None
+            self._normalizeNetsForPins(force=True)
+
+    def iterPinPositions(self):
+        """Yield ``(part, pin, page_position)`` for every placed pin."""
+        for part in self.objects(objType=sch.obj.part.PartObj):
+            for pin, position in part.pin_positions():
+                yield part, pin, position
+
+    def pinPositions(self):
+        return [position for _, _, position in self.iterPinPositions()]
+
+    def connection_points(self):
+        """Return exact schematic points that must remain wire vertices."""
+        return self.pinPositions()
+
+    def _normalizeNetsForPins(self, force=False):
+        nets = list(self.objects(objType=sch.obj.net.NetObj))
+        points = self.connection_points()
+        if not nets or (not points and not force):
+            return
+        normalized = sch.obj.net.NetObj._normalizeGeometry(
+            nets, connection_points=points)
+        if len(normalized) == len(nets) and all(net in nets for net in normalized):
+            return
+        for net in list(self.objects(objType=sch.obj.net.NetObj)):
+            self._objs.remove(net)
+        self._objs.update(normalized)
+        self.sigChanged.emit()
 
     def fromXml(self, pageNode):
         self._name = pageNode.attrib["name"]
@@ -341,10 +376,22 @@ class DocPage(AbstractPage):
             elif obj.tag == "part":
                 part = sch.obj.part.PartObj.fromXml(obj, self._parent.lib)
                 self._objs.add(part)
+                part.doc = self
                 self._objs |= set(part.children())
             elif obj.tag == "sheetRef":
                 sheet_ref = sch.obj.sheetref.SheetRefObj.fromXml(obj, self._parent)
                 self.addSheetReference(sheet_ref)
+
+        # Older documents may contain a wire that crosses a pin before the
+        # pin-aware normalizer is run.  Normalize once after all objects are
+        # loaded so the stored graph has the same topology as newly-drawn
+        # wires.
+        nets = list(self.objects(objType=sch.obj.net.NetObj))
+        if nets:
+            normalized = sch.obj.net.NetObj._normalizeGeometry(
+                nets, connection_points=self.connection_points())
+            self._objs.difference_update(nets)
+            self._objs.update(normalized)
 
     def toXml(self, parentNode):
         page = etree.SubElement(parentNode, "page", name=self.name)
@@ -370,6 +417,13 @@ class SymbolPage(AbstractPage):
     def property_templates(self) -> List[sch.obj.property.PropertyTemplate]:
         """Get all property templates defined for this symbol."""
         return list(self._property_templates)
+
+    @property
+    def pins(self):
+        return list(self.objects(objType=sch.obj.pin.PinObj))
+
+    def addPin(self, pin):
+        self.addObj(pin)
 
     def add_property_template(self, template: sch.obj.property.PropertyTemplate) -> None:
         """Add a property template to this symbol."""
@@ -423,6 +477,8 @@ class SymbolPage(AbstractPage):
             for obj in objs:
                 if obj.tag == "line":
                     self._objs.add(sch.obj.line.LineObj.fromXml(obj))
+                elif obj.tag == "pin":
+                    self._objs.add(sch.obj.pin.PinObj.fromXml(obj, self))
                 elif obj.tag == 'proptext':
                     self._objs.add(sch.obj.proptext.PropTextObj.fromXml(obj, self))
                 elif obj.tag == 'text':

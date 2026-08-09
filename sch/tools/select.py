@@ -10,8 +10,10 @@ import sch.tools.text
 import sch.tools.part
 import sch.tools.proptext
 import sch.tools.hierarchy
+import sch.tools.pin
 import sch.obj.proptext
 import sch.obj.sheetref
+import sch.obj.pin
 from sch.view import Event
 from sch.utils import Layer, LayerType
 from sch.tools.base import EditHandle, TextHandle
@@ -193,6 +195,10 @@ class SelectTool(QObject):
             self._editor.sigDone.connect(self.releaseSelection)
         elif len(self._selection) == 1 and type(self._selection[0]) is sch.obj.sheetref.SheetRefObj:
             self._editor = sch.tools.hierarchy.SheetRefEditor(self._ctrl, self._selection[0])
+            self._editor.sigUpdate.connect(self.sigUpdate)
+            self._editor.sigDone.connect(self.releaseSelection)
+        elif len(self._selection) == 1 and type(self._selection[0]) is sch.obj.pin.PinObj:
+            self._editor = sch.tools.pin.PinEditor(self._ctrl, self._selection[0])
             self._editor.sigUpdate.connect(self.sigUpdate)
             self._editor.sigDone.connect(self.releaseSelection)
         self._ctrl.sigInspectorChanged.emit()

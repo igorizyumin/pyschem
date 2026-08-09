@@ -31,7 +31,9 @@ geometry and property templates; parts refer to masters through the library.
 The current editor supports:
 
 - immutable, integer-coordinate net segments with normalization for splits,
-  merges, deduplication, and T-junctions;
+  merges, deduplication, pin vertices, and T-junctions;
+- symbol pins with transformed schematic connectivity and dangling-pin
+  highlighting;
 - graphical lines;
 - static text and property text;
 - library-backed part instances with property overrides; and

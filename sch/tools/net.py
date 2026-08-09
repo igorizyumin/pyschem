@@ -175,7 +175,11 @@ class NetTool(QObject):
         assert type(newNet.pt1) is QPoint and type(newNet.pt2) is QPoint
         current = list(self._ctrl.doc.objects(objType=NetObj))
         before = [NetObj(net.pt1, net.pt2) for net in current]
-        normalized = NetObj._normalizeGeometry(current + [newNet])
+        connection_points = (self._ctrl.doc.connection_points()
+                             if hasattr(self._ctrl.doc, "connection_points")
+                             else None)
+        normalized = NetObj._normalizeGeometry(
+            current + [newNet], connection_points)
         _trace("add net current={} normalized={}".format(len(current), len(normalized)))
         cmd = NetGraphCmd(self._ctrl.doc, current, before, normalized)
         self._ctrl.doc.doCommand(cmd)
@@ -218,12 +222,12 @@ class NetDragSession(DragController):
     """Immutable preview transaction for moving a net.
 
     In the default orthogonal mode, horizontal and vertical segments move
-    along their own axes; short orthogonal connectors preserve connectivity
-    when a junction moves in the other axis.  Free mode (used by Shift) moves
-    every attached endpoint by the complete cursor delta.  Alt disables
-    attached-endpoint movement entirely, making the selected wire independent
-    for the duration of the drag.  Interior crossings are deliberately not
-    treated as connections.
+    along their own axes.  Dragging an endpoint perpendicular to its segment
+    switches to the same translation used by a body drag, keeping parallel
+    attached wires parallel instead of adding a connector.  Free mode (used
+    by Shift) moves every attached endpoint by the complete cursor delta.  Alt
+    disables attached-endpoint movement entirely.  Interior crossings are
+    deliberately not treated as connections.
     """
 
     def __init__(self, nets, selected, handle_index=None, grab_point=None,
@@ -257,6 +261,7 @@ class NetDragSession(DragController):
         self._cursor = QPoint(self._anchor)
         self._effective_cursor = QPoint(self._anchor)
         self._preview_additions = ()
+        self._active_affected = self._affected
         super().__init__(source, source, self._build_preview)
 
     @staticmethod
@@ -319,10 +324,41 @@ class NetDragSession(DragController):
         return None
 
     def _effective_cursor_for(self, baseline, cursor):
-        # The cursor remains the requested vertex position.  Orthogonal mode
-        # preserves each affected H/V segment by moving its endpoint along
-        # its own axis and adding a short orthogonal connector to the cursor.
+        # The cursor remains the requested vertex position.
         return QPoint(cursor)
+
+    def _perpendicular_endpoint_drag(self, cursor):
+        if (self._mode != "endpoint" or not self._orthogonal
+                or not self._maintain_connectivity):
+            return False
+        selected = self._source[self._selected_index]
+        axis = self._axis(selected)
+        delta = cursor - self._anchor
+        if axis == "horizontal":
+            return delta.y() != 0 and delta.x() == 0
+        if axis == "vertical":
+            return delta.x() != 0 and delta.y() == 0
+        return False
+
+    def _diagonal_endpoint_drag(self, cursor):
+        if (self._mode != "endpoint" or not self._orthogonal
+                or not self._maintain_connectivity):
+            return False
+        selected = self._source[self._selected_index]
+        axis = self._axis(selected)
+        delta = cursor - self._anchor
+        if axis in ("horizontal", "vertical"):
+            return delta.x() != 0 and delta.y() != 0
+        return False
+
+    def _affected_for(self, moved_points):
+        if not self._maintain_connectivity:
+            return (self._selected_index,)
+        return tuple(
+            index for index, net in enumerate(self._source)
+            if any(net.pt1 == point or net.pt2 == point
+                   for point in moved_points)
+        )
 
     def _preserved_endpoint(self, net, old_point, new_point):
         if not self._orthogonal:
@@ -340,19 +376,123 @@ class NetDragSession(DragController):
         second = (net.pt2.x(), net.pt2.y())
         return (first, second) if first <= second else (second, first)
 
+    @staticmethod
+    def _add_connector_segments(additions, addition_keys, start, end,
+                                 preferred_axis=None):
+        """Add an orthogonal connector without introducing a diagonal edge."""
+        if start == end:
+            return
+        if preferred_axis == "horizontal":
+            bend = QPoint(start.x(), end.y())
+        else:
+            bend = QPoint(end.x(), start.y())
+        for first, second in ((start, bend), (bend, end)):
+            connector = NetObj(first, second)
+            if connector.pt1 == connector.pt2:
+                continue
+            key = NetDragSession._segment_key(connector)
+            if key not in addition_keys:
+                addition_keys.add(key)
+                additions.append(connector)
+
+    @staticmethod
+    def _segment_covers(outer, inner):
+        """Return whether a preview segment already covers ``inner``."""
+        if NetDragSession._axis(outer) != NetDragSession._axis(inner):
+            return False
+        axis = NetDragSession._axis(outer)
+        if axis == "horizontal":
+            return (outer.pt1.y() == inner.pt1.y()
+                    and min(outer.pt1.x(), outer.pt2.x())
+                    <= min(inner.pt1.x(), inner.pt2.x())
+                    and max(outer.pt1.x(), outer.pt2.x())
+                    >= max(inner.pt1.x(), inner.pt2.x()))
+        if axis == "vertical":
+            return (outer.pt1.x() == inner.pt1.x()
+                    and min(outer.pt1.y(), outer.pt2.y())
+                    <= min(inner.pt1.y(), inner.pt2.y())
+                    and max(outer.pt1.y(), outer.pt2.y())
+                    >= max(inner.pt1.y(), inner.pt2.y()))
+        return False
+
     def _build_preview(self, baseline, cursor):
         self._effective_cursor = self._effective_cursor_for(baseline, cursor)
         offset = self._effective_cursor - self._anchor
+        body_drag = (self._mode == "segment" or
+                     self._perpendicular_endpoint_drag(cursor))
+        diagonal_endpoint_drag = self._diagonal_endpoint_drag(cursor)
+        if body_drag:
+            moved_points_source = (self._source[self._selected_index].pt1,
+                                    self._source[self._selected_index].pt2)
+        elif diagonal_endpoint_drag:
+            moved_points_source = (self._source[self._selected_index].pt1,
+                                    self._source[self._selected_index].pt2)
+        else:
+            moved_points_source = self._moved_points
         moved_points = {
             (point.x(), point.y()): point + offset
-            for point in self._moved_points
+            for point in moved_points_source
         }
+        if diagonal_endpoint_drag:
+            selected = self._source[self._selected_index]
+            anchor = self._moved_points[0]
+            other = (selected.pt2 if selected.pt1 == anchor
+                     else selected.pt1)
+            axis = self._axis(selected)
+            if axis == "horizontal":
+                perpendicular = QPoint(0, offset.y())
+            else:
+                perpendicular = QPoint(offset.x(), 0)
+            moved_points[(other.x(), other.y())] = other + perpendicular
         preview = []
         additions = []
         addition_keys = set()
-        affected = set(self._affected)
+        affected = set(self._affected_for(moved_points_source))
+        self._active_affected = tuple(sorted(affected))
         for index, net in enumerate(baseline):
-            if self._mode == "segment" and index == self._selected_index:
+            if diagonal_endpoint_drag and index == self._selected_index:
+                selected = self._source[self._selected_index]
+                anchor = self._moved_points[0]
+                other = (selected.pt2 if selected.pt1 == anchor
+                         else selected.pt1)
+                moved_anchor = moved_points[(anchor.x(), anchor.y())]
+                moved_other = moved_points[(other.x(), other.y())]
+                if selected.pt1 == anchor:
+                    preview.append(NetObj(moved_anchor, moved_other))
+                else:
+                    preview.append(NetObj(moved_other, moved_anchor))
+                continue
+            if (diagonal_endpoint_drag and index in affected
+                    and index != self._selected_index):
+                selected_axis = self._axis(
+                    self._source[self._selected_index])
+                net_axis = self._axis(net)
+                if selected_axis and net_axis and selected_axis != net_axis:
+                    moved_endpoint = next(
+                        (endpoint for endpoint in (net.pt1, net.pt2)
+                         if (endpoint.x(), endpoint.y()) in moved_points),
+                        None)
+                    if moved_endpoint is None:
+                        preview.append(net)
+                        continue
+                    moved = moved_points[(moved_endpoint.x(),
+                                          moved_endpoint.y())]
+                    if selected_axis == "horizontal":
+                        parallel = QPoint(moved.x() - moved_endpoint.x(), 0)
+                        perpendicular = QPoint(
+                            0, moved.y() - moved_endpoint.y())
+                    else:
+                        parallel = QPoint(0, moved.y() - moved_endpoint.y())
+                        perpendicular = QPoint(
+                            moved.x() - moved_endpoint.x(), 0)
+                    endpoints = [net.pt1 + parallel, net.pt2 + parallel]
+                    for endpoint_index, endpoint in enumerate((net.pt1,
+                                                                net.pt2)):
+                        if endpoint == moved_endpoint:
+                            endpoints[endpoint_index] += perpendicular
+                    preview.append(NetObj(*endpoints))
+                    continue
+            if body_drag and index == self._selected_index:
                 preview.append(net.translated(offset))
                 continue
             if index not in affected:
@@ -366,22 +506,57 @@ class NetDragSession(DragController):
                 if moved is None:
                     continue
                 if index == self._selected_index and (
-                        self._mode == "segment" or
-                        not self._maintain_connectivity):
+                        body_drag or diagonal_endpoint_drag
+                        or not self._maintain_connectivity):
                     replacement = moved
                 else:
                     replacement = self._preserved_endpoint(net, endpoint, moved)
+                    if (body_drag and self._orthogonal
+                            and index != self._selected_index
+                            and self._axis(net) == self._axis(
+                                self._source[self._selected_index])):
+                        # A continuation parallel to the dragged body should
+                        # retain its original junction coordinate along the
+                        # body.  Route the displaced junction around it rather
+                        # than moving that endpoint and creating a loop.
+                        replacement = QPoint(endpoint)
                     if replacement != moved:
-                        connector = NetObj(replacement, moved)
-                        key = self._segment_key(connector)
-                        if connector.pt1 != connector.pt2 and key not in addition_keys:
-                            addition_keys.add(key)
-                            additions.append(connector)
+                        self._add_connector_segments(
+                            additions, addition_keys, replacement, moved,
+                            preferred_axis=(self._axis(
+                                self._source[self._selected_index])
+                                if self._orthogonal else None))
                 if endpoint_name == "pt1":
                     pt1 = replacement
                 else:
                     pt2 = replacement
+            if (body_drag and pt1 == pt2
+                    and net.pt1 != net.pt2):
+                # The moved junction has reached the branch's far endpoint.
+                # Keep the original branch only when another wire still
+                # anchors the old junction (the T case).  Otherwise the
+                # branch has collapsed as part of a jog and must disappear;
+                # retaining it would leave a dangling perpendicular stub.
+                moved_endpoint = next(
+                    (endpoint for endpoint in (net.pt1, net.pt2)
+                     if (endpoint.x(), endpoint.y()) in moved_points), None)
+                anchored = any(
+                    other_index not in (index, self._selected_index)
+                    and (other.pt1 == moved_endpoint
+                         or other.pt2 == moved_endpoint)
+                    for other_index, other in enumerate(self._source))
+                if anchored:
+                    preview.append(net)
+                else:
+                    # Preserve the source-index slot for selected_preview
+                    # and affected preview drawing.  Zero-length segments are
+                    # ignored by rendering and geometry normalization.
+                    preview.append(NetObj(pt1, pt2))
+                continue
             preview.append(net.with_endpoints(pt1, pt2))
+        additions = [addition for addition in additions
+                     if not any(self._segment_covers(net, addition)
+                                for net in preview)]
         self._preview_additions = tuple(additions)
         return preview + additions
 
@@ -391,7 +566,7 @@ class NetDragSession(DragController):
 
     @property
     def affected_source(self):
-        return [self._source[index] for index in self._affected]
+        return [self._source[index] for index in self._active_affected]
 
     @property
     def anchor(self):
@@ -548,7 +723,10 @@ class NetEditor(BaseEditor):
         if self._drag is None:
             painter.drawLine(self._obj.pt1, self._obj.pt2)
             return
-        for index in self._drag._affected:
+        # The affected set can change when an endpoint drag enters or leaves
+        # perpendicular body-drag mode.  Draw the set used to hide the
+        # document's source segments so every preview branch remains visible.
+        for index in self._drag._active_affected:
             net = self._drag.preview[index]
             if net.pt1 != net.pt2:
                 painter.drawLine(net.pt1, net.pt2)
@@ -673,7 +851,10 @@ class NetEditor(BaseEditor):
         current_nets = self._drag.source
         before = [NetObj(net.pt1, net.pt2) for net in current_nets]
         preview = self._drag.preview
-        normalized = NetObj._normalizeGeometry(preview)
+        connection_points = (self._ctrl.doc.connection_points()
+                             if hasattr(self._ctrl.doc, "connection_points")
+                             else None)
+        normalized = NetObj._normalizeGeometry(preview, connection_points)
         edited = self._drag.selected_preview
         edited_endpoints = (QPoint(edited.pt1), QPoint(edited.pt2))
 
