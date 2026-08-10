@@ -14,6 +14,7 @@ from sch.obj.text import TextObj
 from sch.obj.part import PartObj
 from sch.obj.pin import PinObj
 from sch.obj.proptext import PropTextObj
+from sch.obj.netlabel import NetLabelObj
 from sch.obj.sheetref import SheetRefObj
 from sch.tools.drag import DragController, DragCommand
 
@@ -375,7 +376,8 @@ class GroupEditor(QObject):
             if isinstance(obj, LineObj):
                 obj.pt1 = transform.map(original.pt1)
                 obj.pt2 = transform.map(original.pt2)
-            elif isinstance(obj, (TextObj, PartObj, SheetRefObj, PinObj)):
+            elif isinstance(obj, (TextObj, PartObj, SheetRefObj, PinObj,
+                                  NetLabelObj)):
                 obj.pos = transform.map(original.pos)
             elif isinstance(obj, PropTextObj):
                 obj.setPosGlobal(transform.map(original.posGlobal()))
@@ -387,7 +389,8 @@ class GroupEditor(QObject):
         if isinstance(obj, LineObj):
             obj.pt1 = transform.map(obj.pt1)
             obj.pt2 = transform.map(obj.pt2)
-        elif isinstance(obj, (TextObj, PartObj, SheetRefObj, PinObj)):
+        elif isinstance(obj, (TextObj, PartObj, SheetRefObj, PinObj,
+                              NetLabelObj)):
             obj.pos = transform.map(obj.pos)
             if hasattr(obj, "rot"):
                 obj.rot = (obj.rot + angle) % 360
@@ -527,6 +530,7 @@ class GroupEditor(QObject):
             elif isinstance(obj, LineObj):
                 self._apply_transform(obj, transform)
             elif isinstance(obj, (TextObj, PartObj, SheetRefObj, PinObj,
+                                  NetLabelObj,
                                   PropTextObj)):
                 self._apply_transform(obj, transform)
 

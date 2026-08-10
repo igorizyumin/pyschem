@@ -14,6 +14,7 @@ from sch.utils import Layer, LayerType
 import sch.document
 from copy import copy
 import sch.obj.proptext
+import sch.tools.netlabel
 
 
 class ToolType(Enum):
@@ -23,6 +24,7 @@ class ToolType(Enum):
         TextTool = 3
         PartTool = 4
         SheetRefTool = 5
+        NetLabelTool = 6
 
 
 def getCtrl(doc):
@@ -180,7 +182,8 @@ class SchController(Controller):
     def tools():
         return (sch.tools.select.SelectTool, sch.tools.line.LineTool,
                 sch.tools.net.NetTool, sch.tools.text.TextTool,
-                sch.tools.part.PartTool, sch.tools.hierarchy.SheetRefTool)
+                sch.tools.part.PartTool, sch.tools.hierarchy.SheetRefTool,
+                sch.tools.netlabel.NetLabelTool)
 
 
 class SymController(Controller):

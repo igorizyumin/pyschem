@@ -54,6 +54,7 @@ PropertyTemplate = element prop {
     attribute required { Bool }?,
     attribute type { xsd:string }?,
     attribute order { xsd:string }?,
+    attribute label { xsd:string }?,
     xsd:string?
 }
 
@@ -116,6 +117,7 @@ Pin = element pin
     attribute desc { xsd:string },
 	CoordsAttr,
 	RotAttr,
+	element props { KeyValueProp* }?,
 	# annotation and number label locations / visibility
 	PropText*
 }
@@ -151,7 +153,7 @@ Page = element page
     element objects { SchObject* }
 }
 
-SchObject = ( Line | Text | Part | Net | SheetRef )
+SchObject = ( Line | Text | Part | Net | NetLabel | SheetRef )
 
 Part = element part
 {
@@ -173,6 +175,17 @@ Net = element net
     NetAttr,
     PropText*,
     KeyValueProp*
+}
+
+# graphical, semantics-neutral net metadata annotation
+NetLabel = element netLabel
+{
+    TextPosAttr,
+    TextFormatAttr,
+    attribute name { xsd:string },
+    attribute visible { Bool }?,
+    element props { KeyValueProp* }?,
+    PropText*
 }
 
 # Sheet reference for hierarchical design

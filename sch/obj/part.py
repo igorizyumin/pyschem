@@ -151,13 +151,11 @@ class PartObj(object):
         """Initialize properties from master symbol templates."""
         templates = self._master.property_templates if self._master is not None else []
         self._properties = sch.obj.property.PartPropertyStore(templates)
-        # Apply any overrides that were parsed from XML.  Unknown overrides
-        # are retained only when a master is available; the property store
-        # intentionally rejects names that are not defined by that master.
+        # Apply parsed values after the master is known.  The store keeps
+        # unknown values so a document can round-trip fields introduced by a
+        # newer library or project without silently losing them.
         if hasattr(self, '_overrides_to_apply'):
-            for name, value in self._overrides_to_apply.items():
-                if name in self._properties.names():
-                    self._properties.set(name, value)
+            self._properties.apply_overrides(self._overrides_to_apply)
             del self._overrides_to_apply
 
     def _updateMaster(self):
@@ -255,6 +253,33 @@ class PartObj(object):
         """
         self.properties.set(name, value)
 
+    @property
+    def reference(self) -> str:
+        """The annotation/reference value, such as ``R?`` or ``R12``."""
+        return self.properties.get("part.reference")
+
+    @reference.setter
+    def reference(self, value: str) -> None:
+        self.properties.set("part.reference", value)
+
+    @property
+    def reference_prefix(self) -> str:
+        """Effective master prefix, optionally overridden on this part."""
+        return self.properties.get("part.reference_prefix")
+
+    @reference_prefix.setter
+    def reference_prefix(self, value: str) -> None:
+        self.properties.set("part.reference_prefix", value)
+
+    def getPropertyDefinitions(self):
+        """Return standard and master-defined properties for this part."""
+        definitions = self.properties.definitions()
+        known = {definition.name for definition in definitions}
+        for name in self.properties.names():
+            if name not in known:
+                definitions.append(self.properties.get_property(name).definition)
+        return definitions
+
     def getPropertyTemplates(self) -> List[sch.obj.property.PropertyTemplate]:
         """Get all property templates from the master symbol."""
         if self._master is not None:
@@ -313,6 +338,7 @@ class PartObj(object):
             PartObj instance
         """
         obj = PartObj(lib)
+        obj._overrides_to_apply = {}
         obj.name = elem.attrib['partId']
         obj.pos = QPoint(int(elem.attrib['x']), int(elem.attrib['y']))
         obj.rot = int(elem.attrib['rot'])
@@ -325,8 +351,7 @@ class PartObj(object):
         if props_elem is not None:
             for prop in props_elem:
                 if prop.tag == 'prop' and 'name' in prop.attrib:
-                    # Store override - will be applied when properties are initialized
-                    obj._overrides_to_apply = obj._overrides_to_apply or {}
+                    # Store values until the referenced master is available.
                     obj._overrides_to_apply[prop.attrib['name']] = prop.text or ''
         
         for sub in elem:

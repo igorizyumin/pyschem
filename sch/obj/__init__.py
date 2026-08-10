@@ -4,5 +4,7 @@ __author__ = 'igor'
 from sch.obj.port import Port, PortDirection
 from sch.obj.sheetref import SheetRefObj
 from sch.obj.pin import Pin, PinObj
+from sch.obj.netlabel import NetLabelObj
 
-__all__ = ['Port', 'PortDirection', 'SheetRefObj', 'Pin', 'PinObj']
+__all__ = ['Port', 'PortDirection', 'SheetRefObj', 'Pin', 'PinObj',
+           'NetLabelObj']

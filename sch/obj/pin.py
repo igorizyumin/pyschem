@@ -3,6 +3,7 @@ from PySide6.QtGui import QPainter, QPen, QTransform
 from lxml import etree
 
 from sch.utils import Layer, LayerType
+from sch.obj.property import PropertyDefinition, PropertyStore
 
 
 class PinObj:
@@ -14,6 +15,16 @@ class PinObj:
     """
 
     MARKER_SIZE = 1000
+    STANDARD_PROPERTY_DEFINITIONS = (
+        PropertyDefinition(
+            "pin.number", property_type="text", standard=True,
+            label="Pin number", display_order=-20,
+        ),
+        PropertyDefinition(
+            "pin.name", property_type="text", standard=True,
+            label="Pin name", display_order=-10,
+        ),
+    )
 
     def __init__(self, pin_id="1", desc="", pos=QPoint(0, 0), rot=0):
         self._id = str(pin_id)
@@ -21,6 +32,36 @@ class PinObj:
         self._pos = QPoint(pos)
         self._rot = int(rot) % 360
         self._proptexts = []
+        pin_definitions = [definition.copy()
+                           for definition in self.STANDARD_PROPERTY_DEFINITIONS]
+        pin_definitions[0].default_value = self._id
+        pin_definitions[1].default_value = self._desc
+        self._properties = PropertyStore(
+            definitions=pin_definitions,
+            getters={
+                "pin.number": lambda: self.id,
+                "pin.name": lambda: self.desc,
+            },
+            setters={
+                "pin.number": self._set_number,
+                "pin.name": self._set_name,
+            },
+            aliases={
+                "id": "pin.number",
+                "number": "pin.number",
+                "pin": "pin.number",
+                "desc": "pin.name",
+                "description": "pin.name",
+                "name": "pin.name",
+            },
+            allow_unknown=True,
+        )
+
+    def _set_number(self, value):
+        self.id = value
+
+    def _set_name(self, value):
+        self.desc = value
 
     @property
     def id(self):
@@ -62,6 +103,14 @@ class PinObj:
     def rot(self, value):
         self._rot = int(value) % 360
 
+    @property
+    def properties(self) -> PropertyStore:
+        """Shared master-owned properties for this pin."""
+        return self._properties
+
+    def getPropertyDefinitions(self):
+        return self.properties.definitions()
+
     def children(self):
         return list(self._proptexts)
 
@@ -81,17 +130,18 @@ class PinObj:
 
     def getProp(self, name):
         """Expose pin metadata to optional pin property-text children."""
-        if name in ("id", "number", "pin"):
-            return self.id
-        if name in ("desc", "description", "name"):
-            return self.desc
-        return ""
+        try:
+            return self.properties.get(name)
+        except KeyError:
+            return ""
 
     def setProp(self, name, value):
-        if name in ("id", "number", "pin"):
-            self.id = value
-        elif name in ("desc", "description", "name"):
-            self.desc = value
+        try:
+            self.properties.set(name, value)
+        except KeyError:
+            # Preserve the old no-op behavior for arbitrary property-text
+            # names that are not pin properties.
+            return
 
     def draw(self, painter: QPainter, highlight=True):
         """Draw the pin marker and any metadata labels.
@@ -125,6 +175,12 @@ class PinObj:
                                x=str(self.pos.x()),
                                y=str(self.pos.y()),
                                rot=str(self.rot))
+        overrides = self.properties.get_overrides()
+        if overrides:
+            props = etree.SubElement(pin, "props")
+            for name, value in overrides.items():
+                prop = etree.SubElement(props, "prop", name=name)
+                prop.text = value
         for proptext in self._proptexts:
             proptext.toXml(pin)
 
@@ -134,6 +190,13 @@ class PinObj:
                      elem.attrib.get("desc", ""),
                      QPoint(int(elem.attrib["x"]), int(elem.attrib["y"])),
                      int(elem.attrib.get("rot", "0")))
+        props_elem = elem.find("props")
+        if props_elem is not None:
+            pin.properties.apply_overrides({
+                child.attrib["name"]: child.text or ""
+                for child in props_elem
+                if child.tag == "prop" and "name" in child.attrib
+            })
         import sch.obj.proptext
         for child in elem:
             if child.tag == "proptext":

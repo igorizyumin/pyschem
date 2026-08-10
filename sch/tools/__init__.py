@@ -10,3 +10,5 @@ from .text import TextTool, TextEditor
 from .proptext import PropTextTool, PropTextEditor
 # Expose PinTool and PinEditor from pin module
 from .pin import PinTool, PinEditor
+# Expose NetLabelTool and NetLabelEditor from netlabel module
+from .netlabel import NetLabelTool, NetLabelEditor

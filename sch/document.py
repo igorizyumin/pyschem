@@ -14,6 +14,7 @@ import sch.obj.part
 import sch.obj.pin
 import sch.obj.proptext
 import sch.obj.property
+import sch.obj.netlabel
 import sch.obj.sheetref
 import sch.obj.port
 
@@ -312,7 +313,8 @@ class DocPage(AbstractPage):
         if isinstance(obj, sch.obj.part.PartObj):
             obj.doc = self
         super().addObj(obj)
-        if isinstance(obj, (sch.obj.part.PartObj, sch.obj.net.NetObj)):
+        if isinstance(obj, (sch.obj.part.PartObj, sch.obj.net.NetObj,
+                            sch.obj.netlabel.NetLabelObj)):
             self._normalizeNetsForPins()
 
     def removeSheetReference(self, ref: sch.obj.sheetref.SheetRefObj) -> None:
@@ -334,6 +336,9 @@ class DocPage(AbstractPage):
         super().removeObj(obj)
         if isinstance(obj, sch.obj.part.PartObj):
             obj.doc = None
+        if isinstance(obj, sch.obj.netlabel.NetLabelObj):
+            self._normalizeNetsForPins(force=True)
+        elif isinstance(obj, sch.obj.part.PartObj):
             self._normalizeNetsForPins(force=True)
 
     def iterPinPositions(self):
@@ -346,8 +351,11 @@ class DocPage(AbstractPage):
         return [position for _, _, position in self.iterPinPositions()]
 
     def connection_points(self):
-        """Return exact schematic points that must remain wire vertices."""
-        return self.pinPositions()
+        """Return exact points that must remain wire vertices."""
+        points = self.pinPositions()
+        points.extend(label.pos for label in self.objects(
+            objType=sch.obj.netlabel.NetLabelObj))
+        return points
 
     def _normalizeNetsForPins(self, force=False):
         nets = list(self.objects(objType=sch.obj.net.NetObj))
@@ -378,6 +386,10 @@ class DocPage(AbstractPage):
                 self._objs.add(part)
                 part.doc = self
                 self._objs |= set(part.children())
+            elif obj.tag == "netLabel":
+                label = sch.obj.netlabel.NetLabelObj.fromXml(obj)
+                self._objs.add(label)
+                self._objs |= set(label.children())
             elif obj.tag == "sheetRef":
                 sheet_ref = sch.obj.sheetref.SheetRefObj.fromXml(obj, self._parent)
                 self.addSheetReference(sheet_ref)
@@ -459,16 +471,7 @@ class SymbolPage(AbstractPage):
         if props_elem is not None:
             for prop in props_elem:
                 if prop.tag == 'prop':
-                    template = sch.obj.property.PropertyTemplate(
-                        name=prop.attrib.get('name', ''),
-                        default_value=prop.text or '',
-                        editable=(prop.attrib.get('editable', '1') == '1'),
-                        visible=(prop.attrib.get('visible', '1') == '1'),
-                        required=(prop.attrib.get('required', '0') == '1'),
-                        property_type=prop.attrib.get('type', 'text'),
-                        enum_values=[],  # Will need to parse from attribute if present
-                        display_order=int(prop.attrib.get('order', '0'))
-                    )
+                    template = sch.obj.property.PropertyDefinition.fromXml(prop)
                     self._property_templates.append(template)
         
         # Parse objects
@@ -514,6 +517,8 @@ class SymbolPage(AbstractPage):
                 pp.set('type', template.property_type)
             if template.display_order != 0:
                 pp.set('order', str(template.display_order))
+            if template.label and template.label != template.name:
+                pp.set('label', template.label)
         
         # Write objects
         objs = etree.SubElement(page, "objects")
@@ -579,10 +584,15 @@ class ObjChangeCmd(BaseUndoCmd):
         # those edits.  Keep the small, serializable override map alongside
         # the regular object state so inspector changes undo reliably.
         property_parent = state.get('_parent')
-        property_overrides = None
+        property_owner = None
         if property_parent is not None and hasattr(property_parent, 'properties'):
+            property_owner = property_parent
+        elif hasattr(obj, 'properties'):
+            property_owner = obj
+        property_overrides = None
+        if property_owner is not None:
             try:
-                property_overrides = property_parent.properties.get_overrides()
+                property_overrides = property_owner.properties.get_overrides()
             except (AttributeError, KeyError):
                 property_overrides = None
 
@@ -590,10 +600,7 @@ class ObjChangeCmd(BaseUndoCmd):
             obj.__dict__.clear()
             obj.__dict__.update(state)
             if property_overrides is not None:
-                store = property_parent.properties
-                store.reset_all()
-                for name, value in property_overrides.items():
-                    store.set(name, value)
+                property_owner.properties.restore_overrides(property_overrides)
         return Restore
 
     # this should be called with the unmodified object, which is then changed

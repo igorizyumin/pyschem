@@ -37,6 +37,7 @@ The current editor supports:
 - graphical lines;
 - static text and property text;
 - library-backed part instances with property overrides; and
+- semantics-neutral graphical net-label annotations; and
 - project-scoped sheet references with ports, labels, rotation, and mirroring.
 
 The model and tools expose drawing, selection, hit testing, persistence, and
@@ -44,12 +45,19 @@ undoable edits for these objects.
 
 ### Properties
 
-Symbol masters define property templates. Part instances store only explicit
-overrides. Inspector changes participate in undo/redo, including edits made
-through property-text displays.
+Parts, symbol-master pins, and net-label annotations expose a common property
+interface. Symbol masters define custom part-property defaults and placed
+parts store only explicit overrides. Pin properties are shared by all
+instances of the symbol master. Net labels carry graphical net metadata but
+do not currently define connectivity or global net-name semantics.
 
-Property values are strings. Validation and electrical interpretation are
-future extension responsibilities.
+Standard keys include part reference/reference-prefix, pin number/name, and
+net name. Reference designators are annotations rather than unique object
+identifiers; duplicate values are allowed until a separate annotation step
+resolves them.
+
+Property values are strings. Type metadata, validation, and electrical
+interpretation remain future extension responsibilities.
 
 ## Hierarchy requirements
 

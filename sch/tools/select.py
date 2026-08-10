@@ -14,6 +14,8 @@ import sch.tools.pin
 import sch.obj.proptext
 import sch.obj.sheetref
 import sch.obj.pin
+import sch.obj.netlabel
+import sch.tools.netlabel
 from sch.view import Event
 from sch.utils import Layer, LayerType
 from sch.tools.base import EditHandle, TextHandle
@@ -183,6 +185,10 @@ class SelectTool(QObject):
             self._editor.sigDone.connect(self.releaseSelection)
         elif len(self._selection) == 1 and type(self._selection[0]) is sch.obj.text.TextObj:
             self._editor = sch.tools.text.TextEditor(self._ctrl, self._selection[0])
+            self._editor.sigUpdate.connect(self.sigUpdate)
+            self._editor.sigDone.connect(self.releaseSelection)
+        elif len(self._selection) == 1 and type(self._selection[0]) is sch.obj.netlabel.NetLabelObj:
+            self._editor = sch.tools.netlabel.NetLabelEditor(self._ctrl, self._selection[0])
             self._editor.sigUpdate.connect(self.sigUpdate)
             self._editor.sigDone.connect(self.releaseSelection)
         elif len(self._selection) == 1 and type(self._selection[0]) is sch.obj.part.PartObj:

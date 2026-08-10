@@ -1,6 +1,6 @@
 from PySide6.QtCore import QObject, Signal, Slot, QPoint, QRect, QMargins, Qt
 from PySide6.QtGui import QPainter, QPen, QBrush, QTransform
-from PySide6.QtWidgets import QWidget, QListWidgetItem
+from PySide6.QtWidgets import QWidget, QListWidgetItem, QFormLayout, QLineEdit
 import sch.document
 import sch.controller
 from sch.utils import LayerType, Layer, Geom
@@ -73,6 +73,13 @@ class PartInspector(QWidget):
         self.ui.setupUi(self)
         self._ctrl = ctrl
         self._populateList()
+        self._property_layout = QFormLayout()
+        # Keep the property editor above the existing expanding spacer.
+        self.ui.verticalLayout.insertLayout(
+            max(self.ui.verticalLayout.count() - 1, 0),
+            self._property_layout,
+        )
+        self._property_widgets = {}
         self._obj = None
         self.obj = obj
 
@@ -94,6 +101,12 @@ class PartInspector(QWidget):
                 self.ui.masterList.addItem(item)
 
     def _loadProperties(self, obj: PartObj):
+        while self._property_layout.count():
+            item = self._property_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        self._property_widgets.clear()
         if obj is None:
             return
         for i in range(0, self.ui.masterList.count()):
@@ -101,6 +114,29 @@ class PartInspector(QWidget):
             if path == obj.path and name == obj.name:
                 self.ui.masterList.setCurrentRow(i)
                 break
+        definitions = sorted(
+            obj.getPropertyDefinitions(),
+            key=lambda definition: (definition.display_order, definition.name),
+        )
+        for definition in definitions:
+            editor = QLineEdit()
+            try:
+                editor.setText(obj.properties.get(definition.name))
+            except KeyError:
+                editor.setText("")
+            editor.setReadOnly(not definition.editable)
+            editor.editingFinished.connect(
+                lambda name=definition.name, widget=editor:
+                    self._propertyEdited(name, widget)
+            )
+            self._property_layout.addRow(definition.display_name, editor)
+            self._property_widgets[definition.name] = editor
+
+    def _propertyEdited(self, name, editor):
+        if self._obj is None:
+            return
+        self._obj.setProp(name, editor.text())
+        self.edited.emit()
 
     @Slot(QListWidgetItem, QListWidgetItem)
     def on_masterList_currentItemChanged(self, curr, prev):
@@ -447,6 +483,7 @@ class PartEditor(BaseEditor):
     def _masterChanged(self, path, name):
         self._obj.path = path
         self._obj.name = name
+        self._inspector._loadProperties(self._obj)
         self._commit()
 
     @Slot()

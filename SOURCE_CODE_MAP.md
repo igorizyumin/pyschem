@@ -53,9 +53,10 @@ This document provides a current map of the implemented classes, their locations
 
 | Class | Description |
 |-------|-------------|
-| `PropertyTemplate` | Symbol-level default property definition. |
+| `PropertyDefinition` / `PropertyTemplate` | Stable property metadata, including defaults, type, visibility, editability, and standard-property markers. `PropertyTemplate` remains the compatibility name. |
 | `Property` | A resolved property value, either default or overridden. |
-| `PartPropertyStore` | Stores instance overrides against symbol templates. |
+| `PropertyStore` | Generic definitions, standard accessors, and local property overrides. |
+| `PartPropertyStore` | Part-specific standard definitions plus master and instance values. |
 
 ### sch/obj/sheetref.py and sch/obj/port.py
 
@@ -91,6 +92,12 @@ These classes represent the fundamental elements in a schematic diagram.
 | Class | Description |
 |-------|-------------|
 | `NetObj` | Represents an electrical connection (wire) between pins/ports. Supports automatic net normalization when lines intersect or connect. Has endpoints (pt1, pt2) and methods for collision detection. |
+
+### sch/obj/netlabel.py
+
+| Class | Description |
+|-------|-------------|
+| `NetLabelObj` | Graphical, semantics-neutral net annotation anchored to a page position. Carries generic net properties without modifying immutable wire-segment geometry. |
 
 ### sch/obj/part.py
 
@@ -170,7 +177,7 @@ These classes implement the interactive tools for creating and editing schematic
 |-------|-------------|
 | `PartTool` | Tool for placing parts from the library. Includes an inspector for selecting symbols. |
 | `PartEditor` | Editor for modifying part properties after placement. Supports rotation (R), flip horizontal (H), and flip vertical (V) keyboard shortcuts. |
-| `PartInspector` | Widget for selecting part symbols from the library. |
+| `PartInspector` | Widget for selecting part symbols and editing effective part properties. |
 
 ### sch/tools/proptext.py
 
@@ -193,6 +200,13 @@ These classes implement the interactive tools for creating and editing schematic
 | `TextTool` | Tool for adding text annotations. |
 | `TextEditor` | Editor for modifying text position and properties. |
 | `TextInspector` | Widget for editing text properties (text content, alignment, font family, font size). |
+
+### sch/tools/netlabel.py
+
+| Class | Description |
+|-------|-------------|
+| `NetLabelTool` | Tool for placing semantics-neutral graphical net labels. |
+| `NetLabelEditor` | Editor for moving, rotating, and editing net-label text. |
 
 ---
 

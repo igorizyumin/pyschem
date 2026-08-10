@@ -204,6 +204,12 @@
         </attribute>
       </optional>
       <optional>
+        <attribute>
+          <name ns="">label</name>
+          <data type="string"/>
+        </attribute>
+      </optional>
+      <optional>
         <data type="string"/>
       </optional>
     </element>
@@ -327,6 +333,14 @@
       </attribute>
       <ref name="CoordsAttr"/>
       <ref name="RotAttr"/>
+      <optional>
+        <element>
+          <name ns="">props</name>
+          <zeroOrMore>
+            <ref name="KeyValueProp"/>
+          </zeroOrMore>
+        </element>
+      </optional>
       <zeroOrMore>
         <ref name="PropText"/>
       </zeroOrMore>
@@ -394,6 +408,7 @@
       <ref name="Text"/>
       <ref name="Part"/>
       <ref name="Net"/>
+      <ref name="NetLabel"/>
       <ref name="SheetRef"/>
     </choice>
   </define>
@@ -433,6 +448,34 @@
       </zeroOrMore>
       <zeroOrMore>
         <ref name="KeyValueProp"/>
+      </zeroOrMore>
+    </element>
+  </define>
+  <define name="NetLabel">
+    <element>
+      <name ns="">netLabel</name>
+      <ref name="TextPosAttr"/>
+      <ref name="TextFormatAttr"/>
+      <attribute>
+        <name ns="">name</name>
+        <data type="string"/>
+      </attribute>
+      <optional>
+        <attribute>
+          <name ns="">visible</name>
+          <ref name="Bool"/>
+        </attribute>
+      </optional>
+      <optional>
+        <element>
+          <name ns="">props</name>
+          <zeroOrMore>
+            <ref name="KeyValueProp"/>
+          </zeroOrMore>
+        </element>
+      </optional>
+      <zeroOrMore>
+        <ref name="PropText"/>
       </zeroOrMore>
     </element>
   </define>
