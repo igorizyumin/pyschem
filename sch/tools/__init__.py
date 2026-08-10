@@ -6,9 +6,11 @@ from .net import NetTool, NetEditor
 from .part import PartTool, PartEditor
 # Expose TextTool and TextEditor from text module
 from .text import TextTool, TextEditor
-# Expose PropTextTool and PropTextEditor from proptext module
-from .proptext import PropTextTool, PropTextEditor
-# Expose PinTool and PinEditor from pin module
-from .pin import PinTool, PinEditor
+# Expose property-display placement, editing, and inspection tools
+from .proptext import (PropTextTool, PropTextEditor, PropTextInspector,
+                       PropertyDisplayEditor, PropertyDisplayInspector)
+# Expose pin placement and editing tools
+from .pin import PinTool, PinEditor, PinInspector
+from .symbol import SymbolInspector
 # Expose NetLabelTool and NetLabelEditor from netlabel module
 from .netlabel import NetLabelTool, NetLabelEditor

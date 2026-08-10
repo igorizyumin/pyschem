@@ -20,7 +20,13 @@ class PropTextTool(QObject):
         QObject.__init__(self)
         self._ctrl = ctrl
         self._pos = QPoint()
-        self._obj = sch.obj.proptext.PropTextObj(self._ctrl.doc)
+        definitions = (self._ctrl.doc.getPropertyDefinitions()
+                       if hasattr(self._ctrl.doc, "getPropertyDefinitions")
+                       else [])
+        default_name = definitions[0].name if definitions else "attr"
+        self._obj = sch.obj.proptext.PropertyDisplay(
+            self._ctrl.doc, default_name
+        )
         self._inspector = PropTextInspector(self._obj)
         # self._inspector.edited.connect(self._commit)
 
@@ -76,6 +82,9 @@ class PropTextEditor(BaseEditor):
 
     def handle_custom_event(self, event):
         """Handle keyboard events for rotation."""
+        super().handle_custom_event(event)
+        if event.handled:
+            return
         if event.evType == Event.Type.KeyPressed:
             if event.key == Qt.Key_R:
                 self._obj.rot = (self._obj.rot + 90) % 360
@@ -92,13 +101,17 @@ class PropTextEditor(BaseEditor):
         super()._commit()
 
 
-class PropTextInspector(QWidget):
+class PropertyDisplayInspector(QWidget):
     edited = Signal()
 
     def __init__(self, obj, parent=None):
         super().__init__(parent)
         self.ui = Ui_PropTextInspector()
         self.ui.setupUi(self)
+        self.ui.cbShowName.setEnabled(True)
+        # The displayed value is owned by the parent property object.  Value
+        # edits belong in PinInspector or PartInspector, not on the display.
+        self.ui.leValue.setReadOnly(True)
         self._obj = None
         fontSizes = list(range(6, 16)) + list(range(16, 34, 2)) + list(range(36, 48, 4)) + \
             list(range(48, 66, 6)) + list(range(66, 98, 8))
@@ -120,12 +133,31 @@ class PropTextInspector(QWidget):
                     (self.ui.cbProp, self.ui.leValue, self.ui.cbVis,
                      self.ui.cbShowName, self.ui.alignGroup,
                      self.ui.fontFace, self.ui.fontSize)]
+        if obj is None:
+            self.ui.cbProp.clear()
+            self.ui.leValue.clear()
+            return
+
+        self.ui.cbProp.clear()
+        owner = getattr(obj, "parent", None)
+        if owner is not None and hasattr(owner, "getPropertyDefinitions"):
+            definitions = owner.getPropertyDefinitions()
+            for definition in definitions:
+                self.ui.cbProp.addItem(definition.name, definition.name)
         if obj.name is None:
             self.ui.cbProp.setCurrentIndex(-1)
         else:
-            self.ui.cbProp.setCurrentText(obj.name)
-        self.ui.leValue.setPlaceholderText("(mixed)" if obj.value is None else "")
-        self.ui.leValue.setText("" if obj.value is None else obj.value)
+            index = self.ui.cbProp.findData(obj.name)
+            if index >= 0:
+                self.ui.cbProp.setCurrentIndex(index)
+            else:
+                self.ui.cbProp.setEditText(obj.name)
+        try:
+            value = obj.value
+        except (AttributeError, KeyError):
+            value = ""
+        self.ui.leValue.setPlaceholderText("(mixed)" if value is None else "")
+        self.ui.leValue.setText("" if value is None else value)
         self.ui.cbVis.setTristate(obj.vis is None)
         self.ui.cbVis.setCheckState(Qt.PartiallyChecked if obj.vis is None else
                                     (Qt.Checked if obj.vis else Qt.Unchecked))
@@ -212,9 +244,9 @@ class PropTextInspector(QWidget):
 
     @Slot(str)
     def on_leValue_textEdited(self, text):
-        if self.obj:
-            self.obj.value = text
-            self.edited.emit()
+        # The value is intentionally read-only; the parent property inspector
+        # is the single editor for the underlying property value.
+        return
 
     @Slot(bool)
     def on_cbVis_toggled(self, chkd):
@@ -227,3 +259,9 @@ class PropTextInspector(QWidget):
         if self.obj:
             self.obj.showName = chkd
             self.edited.emit()
+
+
+# Compatibility names for callers and persisted documents that still use the
+# original property-text terminology.
+PropTextInspector = PropertyDisplayInspector
+PropertyDisplayEditor = PropTextEditor

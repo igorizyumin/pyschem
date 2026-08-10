@@ -59,6 +59,11 @@ resolves them.
 Property values are strings. Type metadata, validation, and electrical
 interpretation remain future extension responsibilities.
 
+Property displays are attached text children. Pin displays belong to the
+symbol-master pin and are shared by all part instances. Part-level displays
+are cloned from the symbol master into each part instance, where their
+position, rotation, and visibility may be customized independently.
+
 ## Hierarchy requirements
 
 All schematic files in a hierarchy belong to one project directory. A sheet

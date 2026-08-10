@@ -153,7 +153,9 @@ class Controller(QObject):
         if self._tool is not None and hasattr(self._tool, 'hiddenObjects'):
             hidden = tuple(self._tool.hiddenObjects())
         out = [obj for obj in self.doc.objects()
-               if not any(obj is item for item in hidden)]
+               if not (isinstance(obj, sch.obj.proptext.PropTextObj)
+                       and obj.parent is not self.doc)
+               and not any(obj is item for item in hidden)]
         if self._tool is not None and hasattr(self._tool, 'previewDrawables'):
             out.extend(self._tool.previewDrawables())
         out.append(JunctionDrawable())

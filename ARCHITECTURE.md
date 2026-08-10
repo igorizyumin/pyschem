@@ -83,6 +83,21 @@ instance of that master. Per-instance pin overrides are intentionally not part
 of the current model. Legacy pin fields remain compatibility aliases while
 canonical properties are introduced.
 
+### Attached property displays
+
+`PropertyDisplay` is the common text child for rendering a property value. It
+reuses text rendering, alignment, font, visibility, selection, and move/rotate
+editing while storing only presentation state; the parent remains the source
+of the value.
+
+Pin displays are children of symbol-master pins and use pin-local coordinates.
+They remain shared with every part instance and cannot be customized on an
+instance. Symbol-master displays for part properties are cloned into each
+`PartObj` in part-local coordinates, allowing an instance to move, rotate, or
+hide its own reference/value/custom-field displays without changing the
+master. Attached displays are indexed for selection but serialized by their
+owner so they are drawn and persisted exactly once.
+
 ### Net labels and net semantics
 
 `NetObj` represents immutable wire-segment geometry only. Properties must not

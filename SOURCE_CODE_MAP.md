@@ -122,7 +122,7 @@ These classes represent the fundamental elements in a schematic diagram.
 
 | Class | Description |
 |-------|-------------|
-| `PropTextObj` | Represents a property text display on the schematic. Shows property values dynamically and can display property names. |
+| `PropertyDisplay` | Attached text child that resolves and displays a property value. Supports parent-local coordinates, visibility, rotation, alignment, and font settings. `PropTextObj` remains an API alias. |
 
 ### sch/obj/sheetref.py
 
@@ -179,13 +179,27 @@ These classes implement the interactive tools for creating and editing schematic
 | `PartEditor` | Editor for modifying part properties after placement. Supports rotation (R), flip horizontal (H), and flip vertical (V) keyboard shortcuts. |
 | `PartInspector` | Widget for selecting part symbols and editing effective part properties. |
 
+### sch/tools/pin.py
+
+| Class | Description |
+|-------|-------------|
+| `PinTool` | Tool for placing pins in a symbol master. |
+| `PinEditor` | Editor for moving and rotating a symbol-master pin; exposes the pin inspector. |
+| `PinInspector` | Dynamic widget for editing standard and custom properties on a symbol-master pin. |
+
 ### sch/tools/proptext.py
 
 | Class | Description |
 |-------|-------------|
-| `PropTextTool` | Tool for adding property text displays. |
-| `PropTextEditor` | Editor for modifying property text position. |
-| `PropTextInspector` | Widget for editing property text properties (property name, value, visibility, alignment, font). |
+| `PropTextTool` | Tool for adding property displays. |
+| `PropTextEditor` | Editor for moving and rotating an attached property display. |
+| `PropertyDisplayInspector` | Reusable widget for editing a display's property binding, visibility, name display, alignment, and font. `PropTextInspector` remains an API alias. |
+
+### sch/tools/symbol.py
+
+| Class | Description |
+|-------|-------------|
+| `SymbolInspector` | Default symbol-editor inspector for editing global part-property defaults when no object is selected. |
 
 ### sch/tools/select.py
 

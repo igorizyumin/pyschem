@@ -35,6 +35,7 @@ class PartObj(object):
         # Preserve the constructor's library path.  Clearing it here makes
         # newly-created parts serialize with a null ``schPath`` and prevents
         # valid part instances from round-tripping.
+        self._proptexts = []
         self.path = path
         self._rot = None
         self._mirror = None
@@ -44,13 +45,33 @@ class PartObj(object):
         self.pos = QPoint(pos)
         self.rot = rot
         self.mirror = mirror
-        self._proptexts = []
         self._properties: sch.obj.property.PartPropertyStore = None
         self._doc = None
 
     def children(self) -> List[sch.obj.proptext.PropTextObj]:
         """Get all property text objects associated with this part."""
         return self._proptexts
+
+    def __copy__(self):
+        """Copy a part for placement without sharing instance-owned state."""
+        clone = self.__class__.__new__(self.__class__)
+        clone.__dict__ = self.__dict__.copy()
+        clone._pos = QPoint(self.pos)
+        clone._rot = self.rot
+        clone._mirror = self.mirror
+        clone._tr = None
+        clone._bb = None
+        clone._doc = None
+        clone._proptexts = [display.clone(clone)
+                            for display in self._proptexts]
+        if self._properties is not None:
+            clone._properties = sch.obj.property.PartPropertyStore(
+                self._properties.definitions()
+            )
+            clone._properties.apply_overrides(
+                self._properties.get_overrides()
+            )
+        return clone
 
     @property
     def pos(self) -> QPoint:
@@ -90,7 +111,6 @@ class PartObj(object):
     def path(self, new):
         self._path = new
         self._updateMaster()
-        self._resetProps()
 
     @property
     def name(self):
@@ -160,10 +180,13 @@ class PartObj(object):
 
     def _updateMaster(self):
         self._master = self._lib.getSym(self.path, self.name)
+        if self._master is not None and hasattr(self._master, "ensure_default_displays"):
+            self._master.ensure_default_displays()
         self._updateMasterBbox()
         self._bb = None
         # Reset properties when master changes
         self._properties = None
+        self._resetProps()
 
     def _updateTransform(self):
         if self._tr is None:
@@ -196,13 +219,12 @@ class PartObj(object):
                          self._tr.map(self._masterBbox.bottomRight())).normalized()
 
     def _resetProps(self):
-        """Reset property text objects from master symbol."""
+        """Clone symbol-level property displays for this part instance."""
         self._proptexts = []
         if self._master:
             for prop in self._master.objects(objType=sch.obj.proptext.PropTextObj):
-                c = copy.copy(prop)
-                c.doc = self
-                self._proptexts.append(c)
+                if prop.parent is self._master:
+                    self._proptexts.append(prop.clone(self))
 
     def draw(self, painter: QPainter):
         if self._master is None:
@@ -217,6 +239,8 @@ class PartObj(object):
             else:
                 obj.draw(painter)
         painter.restore()
+        for prop in self._proptexts:
+            prop.draw(painter)
 
     def bbox(self):
         if self._bb is None:
@@ -226,9 +250,6 @@ class PartObj(object):
     def testHit(self, pt: QPoint, radius: int):
         if self._bb is None:
             self._updateBbox()
-        for txt in self._proptexts:
-            if txt.bbox().contains(self._tr.inverted()[0].map(pt)):
-                return True
         return self.bbox().contains(pt)
 
     def getProp(self, name: str) -> str:
@@ -345,6 +366,10 @@ class PartObj(object):
         obj.mirror = (elem.attrib['mirror'] == '1')
         obj.path = elem.attrib['schPath']
         obj._proptexts = []
+        # The master may initialize and consume an earlier empty staging map
+        # while name/path are being resolved.  Recreate it before parsing the
+        # instance overrides from this element.
+        obj._overrides_to_apply = {}
         
         # Parse property overrides
         props_elem = elem.find("props")
@@ -353,6 +378,10 @@ class PartObj(object):
                 if prop.tag == 'prop' and 'name' in prop.attrib:
                     # Store values until the referenced master is available.
                     obj._overrides_to_apply[prop.attrib['name']] = prop.text or ''
+
+        if obj._properties is not None:
+            obj._properties.apply_overrides(obj._overrides_to_apply)
+            del obj._overrides_to_apply
         
         for sub in elem:
             if sub.tag == 'proptext':

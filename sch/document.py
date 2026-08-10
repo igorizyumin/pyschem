@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import List
 from uuid import UUID, uuid4
 from PySide6.QtCore import *
-from PySide6.QtGui import QUndoStack, QUndoCommand
+from PySide6.QtGui import QUndoStack, QUndoCommand, QTransform
 from PySide6.QtWidgets import *
 from lxml import etree
 import sch.obj.line
@@ -82,6 +82,7 @@ class MasterDocument(QObject):
         newp = SymbolPage(self)
         newp.sigChanged.connect(self.sigCleanChanged)
         newp.name = self._uniqueName(symNames, "symbol")
+        newp.ensure_default_displays()
         self._symbols.append(newp)
         self.sigChanged.emit()
 
@@ -313,6 +314,9 @@ class DocPage(AbstractPage):
         if isinstance(obj, sch.obj.part.PartObj):
             obj.doc = self
         super().addObj(obj)
+        if isinstance(obj, (sch.obj.part.PartObj,
+                            sch.obj.netlabel.NetLabelObj)):
+            self._objs.update(obj.children())
         if isinstance(obj, (sch.obj.part.PartObj, sch.obj.net.NetObj,
                             sch.obj.netlabel.NetLabelObj)):
             self._normalizeNetsForPins()
@@ -334,6 +338,9 @@ class DocPage(AbstractPage):
             self.sigChanged.emit()
             return
         super().removeObj(obj)
+        if isinstance(obj, (sch.obj.part.PartObj,
+                            sch.obj.netlabel.NetLabelObj)):
+            self._objs.difference_update(obj.children())
         if isinstance(obj, sch.obj.part.PartObj):
             obj.doc = None
         if isinstance(obj, sch.obj.netlabel.NetLabelObj):
@@ -383,13 +390,10 @@ class DocPage(AbstractPage):
                 self._objs.add(sch.obj.text.TextObj.fromXml(obj))
             elif obj.tag == "part":
                 part = sch.obj.part.PartObj.fromXml(obj, self._parent.lib)
-                self._objs.add(part)
-                part.doc = self
-                self._objs |= set(part.children())
+                self.addObj(part)
             elif obj.tag == "netLabel":
                 label = sch.obj.netlabel.NetLabelObj.fromXml(obj)
-                self._objs.add(label)
-                self._objs |= set(label.children())
+                self.addObj(label)
             elif obj.tag == "sheetRef":
                 sheet_ref = sch.obj.sheetref.SheetRefObj.fromXml(obj, self._parent)
                 self.addSheetReference(sheet_ref)
@@ -408,7 +412,10 @@ class DocPage(AbstractPage):
     def toXml(self, parentNode):
         page = etree.SubElement(parentNode, "page", name=self.name)
         objs = etree.SubElement(page, "objects")
-        for obj in self.objects(exclude={sch.obj.proptext.PropTextObj}):
+        for obj in self.objects():
+            if (isinstance(obj, sch.obj.proptext.PropTextObj)
+                    and obj.parent is not self):
+                continue
             obj.toXml(objs)
 
 
@@ -425,6 +432,24 @@ class SymbolPage(AbstractPage):
         self._name = "symbol"
         self._property_templates: List[sch.obj.property.PropertyTemplate] = []
 
+    def transform(self):
+        """Symbol-master coordinates are already page-local coordinates."""
+        return QTransform()
+
+    def addObj(self, obj):
+        if isinstance(obj, sch.obj.pin.PinObj):
+            obj.ensure_default_displays()
+        elif isinstance(obj, sch.obj.proptext.PropTextObj):
+            obj.parent = self
+        super().addObj(obj)
+        if isinstance(obj, sch.obj.pin.PinObj):
+            self._objs.update(obj.children())
+
+    def removeObj(self, obj):
+        super().removeObj(obj)
+        if isinstance(obj, sch.obj.pin.PinObj):
+            self._objs.difference_update(obj.children())
+
     @property
     def property_templates(self) -> List[sch.obj.property.PropertyTemplate]:
         """Get all property templates defined for this symbol."""
@@ -440,6 +465,75 @@ class SymbolPage(AbstractPage):
     def add_property_template(self, template: sch.obj.property.PropertyTemplate) -> None:
         """Add a property template to this symbol."""
         self._property_templates.append(template)
+        self._ensure_default_displays()
+
+    def getProp(self, name: str) -> str:
+        """Resolve a master-level property for property displays."""
+        template = self.get_property_template(name)
+        if template is not None:
+            return template.default_value
+        if name == "part.reference_prefix":
+            return "?"
+        if name == "part.reference":
+            prefix = self.getProp("part.reference_prefix")
+            return f"{prefix}?" if prefix and prefix != "?" else "?"
+        raise KeyError(f"Property '{name}' not found")
+
+    def setProp(self, name: str, value: str) -> None:
+        template = self.get_property_template(name)
+        if template is None:
+            if name != "part.reference_prefix":
+                raise KeyError(f"Property '{name}' not found")
+            template = sch.obj.property.PropertyDefinition(
+                name, "?", standard=True, label="Reference prefix",
+                display_order=-10,
+            )
+            self.add_property_template(template)
+        template.default_value = "" if value is None else str(value)
+
+    def getPropertyDefinitions(self):
+        """Return standard and master-defined properties for displays."""
+        definitions = {
+            "part.reference": sch.obj.property.PropertyDefinition(
+                "part.reference", self.getProp("part.reference"),
+                property_type="reference", standard=True,
+                label="Reference", display_order=-20,
+            ),
+            "part.reference_prefix": sch.obj.property.PropertyDefinition(
+                "part.reference_prefix", self.getProp("part.reference_prefix"),
+                standard=True, label="Reference prefix", display_order=-10,
+            ),
+        }
+        for template in self._property_templates:
+            definitions[template.name] = template.copy()
+        return list(definitions.values())
+
+    def getMasterPropertyDefinitions(self):
+        """Return properties editable as symbol-master defaults.
+
+        ``part.reference`` is an instance annotation and therefore does not
+        belong in the global symbol inspector.  The reference prefix and all
+        master-defined fields do.
+        """
+        return [definition for definition in self.getPropertyDefinitions()
+                if definition.name != "part.reference"]
+
+    def ensure_default_displays(self):
+        """Create conventional master-level reference/value displays."""
+        import sch.obj.proptext
+        configured = {
+            obj.name for obj in self._objs
+            if isinstance(obj, sch.obj.proptext.PropTextObj)
+            and obj.parent is self
+        }
+        defaults = [("part.reference", QPoint(0, -2000))]
+        if self.get_property_template("part.value") is not None:
+            defaults.append(("part.value", QPoint(0, -4000)))
+        for name, pos in defaults:
+            if name not in configured:
+                self.addObj(sch.obj.proptext.PropertyDisplay(self, name, pos=pos))
+
+    _ensure_default_displays = ensure_default_displays
 
     def get_property_template(self, name: str) -> sch.obj.property.PropertyTemplate:
         """
@@ -479,13 +573,14 @@ class SymbolPage(AbstractPage):
         if objs is not None:
             for obj in objs:
                 if obj.tag == "line":
-                    self._objs.add(sch.obj.line.LineObj.fromXml(obj))
+                    self.addObj(sch.obj.line.LineObj.fromXml(obj))
                 elif obj.tag == "pin":
-                    self._objs.add(sch.obj.pin.PinObj.fromXml(obj, self))
+                    self.addObj(sch.obj.pin.PinObj.fromXml(obj, self))
                 elif obj.tag == 'proptext':
-                    self._objs.add(sch.obj.proptext.PropTextObj.fromXml(obj, self))
+                    self.addObj(sch.obj.proptext.PropTextObj.fromXml(obj, self))
                 elif obj.tag == 'text':
-                    self._objs.add(sch.obj.text.TextObj.fromXml(obj))
+                    self.addObj(sch.obj.text.TextObj.fromXml(obj))
+        self.ensure_default_displays()
 
     def toXml(self, parentNode):
         """
@@ -523,6 +618,9 @@ class SymbolPage(AbstractPage):
         # Write objects
         objs = etree.SubElement(page, "objects")
         for obj in self._objs:
+            if (isinstance(obj, sch.obj.proptext.PropTextObj)
+                    and obj.parent is not self):
+                continue
             obj.toXml(objs)
 
 
@@ -596,9 +694,22 @@ class ObjChangeCmd(BaseUndoCmd):
             except (AttributeError, KeyError):
                 property_overrides = None
 
+        object_members = None
+        if hasattr(obj, "_objs"):
+            object_members = set(obj._objs)
+        property_templates = None
+        if hasattr(obj, "_property_templates"):
+            property_templates = [copy.copy(template)
+                                  for template in obj._property_templates]
+
         def Restore():
             obj.__dict__.clear()
             obj.__dict__.update(state)
+            if object_members is not None:
+                obj._objs = set(object_members)
+            if property_templates is not None:
+                obj._property_templates = [copy.copy(template)
+                                           for template in property_templates]
             if property_overrides is not None:
                 property_owner.properties.restore_overrides(property_overrides)
         return Restore

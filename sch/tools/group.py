@@ -487,8 +487,13 @@ class GroupEditor(QObject):
             event.handled = True
         elif event.evType == Event.Type.KeyPressed:
             if event.key == Qt.Key_Delete:
-                for obj in self._objects:
-                    self._ctrl.doc.removeObj(obj)
+                # Parent objects remove their attached displays as part of
+                # removal.  A multi-selection can therefore contain both a
+                # pin and its child displays; skip children already removed
+                # with their owner.
+                for obj in list(self._objects):
+                    if self._ctrl.doc.hasObject(obj):
+                        self._ctrl.doc.removeObj(obj)
                 self.sigDone.emit(); event.handled = True
             elif event.key in (Qt.Key_R, Qt.Key_H, Qt.Key_V):
                 if self._transform_center is None:

@@ -14,6 +14,7 @@ from sch.obj.part import PartObj
 from sch.obj.pin import PinObj
 from sch.utils import Layer, LayerType
 from sch.tools.part import PartEditor
+from sch.tools.group import GroupEditor
 from sch.view import Event
 
 
@@ -88,6 +89,27 @@ class TestPins(unittest.TestCase):
         pin = next(iter(loaded.symbols[0].objects(objType=PinObj)))
         self.assertEqual((pin.id, pin.desc, pin.pos, pin.rot),
                          ("A", "clock", QPoint(100, -200), 90))
+
+    def test_delete_multiple_pins_with_attached_displays(self):
+        document = MasterDocument(None)
+        symbol = SymbolPage(document)
+        first = PinObj("1", "A", QPoint(0, 0))
+        second = PinObj("2", "B", QPoint(5000, 0))
+        symbol.addObj(first)
+        symbol.addObj(second)
+
+        class Controller:
+            def __init__(self, doc):
+                self.doc = doc
+
+        selected = [first, *first.children(), second, *second.children()]
+        editor = GroupEditor(Controller(symbol), selected)
+        event = Event(Event.Type.KeyPressed, key=Qt.Key_Delete)
+        editor.handleEvent(event)
+
+        self.assertTrue(event.handled)
+        self.assertEqual(symbol.objects(objType=PinObj), set())
+        self.assertEqual(symbol.objects(), set())
 
     def test_pin_marker_uses_a_visible_cosmetic_pen(self):
         class PainterSpy:

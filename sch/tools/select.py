@@ -1,5 +1,6 @@
 from PySide6.QtCore import Signal, QObject, Slot, Qt, QPoint, QRect, QMargins
 from PySide6.QtGui import QPainter, QPen
+import sch.document
 import sch.obj.line
 import sch.obj.net
 import sch.obj.text
@@ -16,6 +17,7 @@ import sch.obj.sheetref
 import sch.obj.pin
 import sch.obj.netlabel
 import sch.tools.netlabel
+import sch.tools.symbol
 from sch.view import Event
 from sch.utils import Layer, LayerType
 from sch.tools.base import EditHandle, TextHandle
@@ -31,6 +33,7 @@ class SelectTool(QObject):
         self._selection = []
         self._lastFind = []
         self._editor = None
+        self._default_inspector = None
         self._rubber_start = None
         self._rubber_rect = None
 
@@ -38,6 +41,13 @@ class SelectTool(QObject):
     def inspector(self):
         if self._editor:
             return self._editor.inspector
+        if isinstance(self._ctrl.doc, sch.document.SymbolPage):
+            if (self._default_inspector is None
+                    or self._default_inspector.obj is not self._ctrl.doc):
+                self._default_inspector = sch.tools.symbol.SymbolInspector(
+                    self._ctrl, self._ctrl.doc
+                )
+            return self._default_inspector
         return None
 
     @staticmethod

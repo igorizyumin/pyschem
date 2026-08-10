@@ -57,6 +57,23 @@ class PinObj:
             allow_unknown=True,
         )
 
+    def ensure_default_displays(self):
+        """Create the standard pin number/name displays if absent."""
+        import sch.obj.proptext
+
+        existing = {display.name for display in self._proptexts}
+        defaults = (
+            ("pin.number", QPoint(1000, 0), True),
+            ("pin.name", QPoint(-1000, 0), bool(self.desc)),
+        )
+        for name, pos, visible in defaults:
+            if name not in existing:
+                self._proptexts.append(
+                    sch.obj.proptext.PropertyDisplay(
+                        self, name, pos=pos, visible=visible,
+                    )
+                )
+
     def _set_number(self, value):
         self.id = value
 
@@ -109,7 +126,15 @@ class PinObj:
         return self._properties
 
     def getPropertyDefinitions(self):
-        return self.properties.definitions()
+        definitions = self.properties.definitions()
+        known = {definition.name for definition in definitions}
+        # Preserve custom pin properties loaded from newer files so the
+        # symbol editor can display and edit them even when this version does
+        # not know their definitions yet.
+        for name in self.properties.names():
+            if name not in known:
+                definitions.append(self.properties.get_property(name).definition)
+        return definitions
 
     def children(self):
         return list(self._proptexts)

@@ -1,5 +1,6 @@
 from PySide6.QtCore import QPoint, QMargins, Qt, QObject, Signal, Slot
 from PySide6.QtGui import QPainter
+from PySide6.QtWidgets import QWidget, QFormLayout, QLineEdit
 
 import sch.document
 from sch.obj.pin import PinObj
@@ -72,6 +73,11 @@ class PinTool(QObject):
 class PinEditor(BaseEditor):
     """Move and rotate a pin in a symbol master."""
 
+    def __init__(self, ctrl, obj):
+        super().__init__(ctrl, obj)
+        self._inspector = PinInspector(obj)
+        self._inspector.edited.connect(self._commit)
+
     def create_handles(self):
         self._handles = [EditHandle(self._ctrl, self._obj.pos)]
 
@@ -97,3 +103,60 @@ class PinEditor(BaseEditor):
     def _drag(self, pos):
         self._obj.pos = pos
         self.sigUpdate.emit()
+
+
+class PinInspector(QWidget):
+    """Edit the properties of a pin in a symbol master."""
+
+    edited = Signal()
+
+    def __init__(self, obj=None, parent=None):
+        super().__init__(parent)
+        self._property_layout = QFormLayout(self)
+        self._property_widgets = {}
+        self._obj = None
+        self.obj = obj
+
+    @property
+    def obj(self):
+        return self._obj
+
+    @obj.setter
+    def obj(self, new):
+        self._obj = new
+        self._loadProperties(new)
+
+    def _loadProperties(self, obj):
+        while self._property_layout.count():
+            item = self._property_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        self._property_widgets.clear()
+        if obj is None:
+            return
+
+        definitions = sorted(
+            (definition for definition in obj.getPropertyDefinitions()
+             if definition.visible),
+            key=lambda definition: (definition.display_order, definition.name),
+        )
+        for definition in definitions:
+            editor = QLineEdit()
+            try:
+                editor.setText(obj.properties.get(definition.name))
+            except KeyError:
+                editor.setText("")
+            editor.setReadOnly(not definition.editable)
+            editor.editingFinished.connect(
+                lambda name=definition.name, widget=editor:
+                    self._propertyEdited(name, widget)
+            )
+            self._property_layout.addRow(definition.display_name, editor)
+            self._property_widgets[definition.name] = editor
+
+    def _propertyEdited(self, name, editor):
+        if self._obj is None:
+            return
+        self._obj.setProp(name, editor.text())
+        self.edited.emit()
