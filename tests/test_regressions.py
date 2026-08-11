@@ -112,6 +112,29 @@ class TestNetRegression(unittest.TestCase):
         self.assertIn(NetObj(QPoint(0, 0), QPoint(10, 0)),
                       page.objects(NetObj))
 
+    def test_net_tool_commits_both_legs_when_final_endpoint_touches_a_wire(self):
+        class Controller:
+            def __init__(self, page):
+                self.doc = page
+
+            @staticmethod
+            def snapPt(point):
+                return QPoint(point)
+
+        page = DocPage(MasterDocument(None))
+        existing = NetObj(QPoint(10, 10), QPoint(20, 10))
+        page.addObj(existing)
+        tool = NetTool(Controller(page))
+        tool.handleEvent(Event(Event.Type.MouseReleased, QPoint(0, 0)))
+        tool.handleEvent(Event(Event.Type.MouseReleased, QPoint(10, 10)))
+
+        self.assertIsNone(tool._firstPt)
+        self.assertIn(NetObj(QPoint(0, 0), QPoint(10, 0)),
+                      page.objects(NetObj))
+        self.assertIn(NetObj(QPoint(10, 0), QPoint(10, 10)),
+                      page.objects(NetObj))
+        self.assertIn(existing, page.objects(NetObj))
+
     def test_net_tool_preview_is_drawn_in_yellow(self):
         class Controller:
             def __init__(self, page):

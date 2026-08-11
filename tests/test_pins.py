@@ -13,7 +13,8 @@ from sch.obj.net import NetObj
 from sch.obj.part import PartObj
 from sch.obj.pin import PinObj
 from sch.utils import Layer, LayerType
-from sch.tools.part import PartEditor
+from sch.tools.part import PartEditor, PartTool
+from sch.tools.net import NetTool
 from sch.tools.group import GroupEditor
 from sch.view import Event
 
@@ -50,6 +51,31 @@ class TestPins(unittest.TestCase):
         page.addObj(part)
         return page, part
 
+    def test_part_placement_snaps_origin_not_pin_marker_bbox(self):
+        symbol = MasterDocument(None)
+        master = SymbolPage(symbol)
+        master.name = "U"
+        master.addObj(PinObj("1", "input", QPoint(0, 0)))
+        library = FakeLibrary(master)
+        page = DocPage(MasterDocument(library))
+
+        class Controller:
+            doc = page
+            lib = library
+
+            @staticmethod
+            def snapPt(point):
+                return QPoint(point)
+
+        tool = PartTool(Controller())
+        tool.onMasterChanged("symbols.xsch", "U")
+        event = Event(Event.Type.MouseMoved, QPoint(5000, 10000))
+        tool.handleEvent(event)
+
+        self.assertTrue(event.handled)
+        self.assertEqual(tool._obj.pos, QPoint(5000, 10000))
+        self.assertEqual(tool._obj.pin_positions()[0][1], QPoint(5000, 10000))
+
     def test_wire_crossing_pin_is_split_and_pin_point_is_preserved(self):
         page, _ = self._page_with_part()
         page.addObj(NetObj(QPoint(0, 0), QPoint(10, 0)))
@@ -72,6 +98,26 @@ class TestPins(unittest.TestCase):
         second = PartObj(first._lib, "symbols.xsch", "U", QPoint(0, 0))
         page.addObj(second)
         self.assertTrue(pin.is_connected(page, QPoint(5, 0), owner=first))
+
+    def test_net_tool_ends_chain_when_endpoint_reaches_pin(self):
+        page, _ = self._page_with_part(QPoint(0, 5))
+
+        class Controller:
+            doc = page
+
+            @staticmethod
+            def snapPt(point):
+                return QPoint(point)
+
+        tool = NetTool(Controller())
+        tool.handleEvent(Event(Event.Type.MouseReleased, QPoint(0, 0)))
+        tool.handleEvent(Event(Event.Type.MouseReleased, QPoint(5, 5)))
+
+        self.assertIsNone(tool._firstPt)
+        self.assertIn(NetObj(QPoint(0, 0), QPoint(5, 0)),
+                      page.objects(NetObj))
+        self.assertIn(NetObj(QPoint(5, 0), QPoint(5, 5)),
+                      page.objects(NetObj))
 
     def test_pin_persistence_round_trip(self):
         source = MasterDocument(None)

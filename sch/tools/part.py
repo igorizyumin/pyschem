@@ -42,7 +42,11 @@ class PartTool(QObject):
 
     def handleEvent(self, e):
         if e.evType == sch.controller.Event.Type.MouseMoved:
-            self._obj.pos = self._ctrl.snapPt(e.pos) - (self._obj.bbox().topLeft() - self._obj.pos)
+            # ``pos`` is the symbol's logical origin.  Do not anchor the
+            # preview to its bounding-box corner: pin markers extend 500
+            # units beyond their connection point, which would otherwise
+            # store a half-marker (500-unit) placement offset.
+            self._obj.pos = self._ctrl.snapPt(e.pos)
             self.sigUpdate.emit()
             e.handled = True
         elif e.evType == sch.controller.Event.Type.MouseReleased:

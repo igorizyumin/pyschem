@@ -122,14 +122,32 @@ class NetTool(QObject):
                     self._firstPt = None
                 else:
                     start, endpoint = points[0]
-                    new_net = NetObj(start, endpoint)
                     existing_nets = list(self._ctrl.doc.objects(objType=NetObj))
-                    self.addNet(new_net)
-                    if any(net.touchesPt(endpoint) for net in existing_nets):
-                        # Reaching an existing wire completes the chain.  The
-                        # tool itself remains active for starting another one.
+                    connection_points = (self._ctrl.doc.connection_points()
+                                         if hasattr(self._ctrl.doc,
+                                                    "connection_points")
+                                         else ())
+                    final_endpoint = points[-1][1]
+                    reaches_first_leg_target = (
+                        any(net.touchesPt(endpoint) for net in existing_nets)
+                        or any(point == endpoint
+                               for point in connection_points))
+                    reaches_final_target = (
+                        any(net.touchesPt(final_endpoint)
+                            for net in existing_nets)
+                        or any(point == final_endpoint
+                               for point in connection_points))
+                    if reaches_final_target:
+                        # A click on a wire or pin completes the whole live
+                        # route, including its pending corner segment.
+                        self.addNets(NetObj(route_start, route_end)
+                                     for route_start, route_end in points)
+                        self._firstPt = None
+                    elif reaches_first_leg_target:
+                        self.addNet(NetObj(start, endpoint))
                         self._firstPt = None
                     else:
+                        self.addNet(NetObj(start, endpoint))
                         # Commit only the first leg.  The remaining leg stays
                         # live, and the next click starts with the opposite
                         # polarity.
@@ -173,14 +191,22 @@ class NetTool(QObject):
     def addNet(self, newNet):
         """Add a wire by normalizing the complete integer-coordinate graph."""
         assert type(newNet.pt1) is QPoint and type(newNet.pt2) is QPoint
+        self.addNets([newNet])
+
+    def addNets(self, newNets):
+        """Add multiple wires in one normalized graph/undo operation."""
+        newNets = list(newNets)
+        for new_net in newNets:
+            assert type(new_net.pt1) is QPoint and type(new_net.pt2) is QPoint
         current = list(self._ctrl.doc.objects(objType=NetObj))
         before = [NetObj(net.pt1, net.pt2) for net in current]
         connection_points = (self._ctrl.doc.connection_points()
                              if hasattr(self._ctrl.doc, "connection_points")
                              else None)
         normalized = NetObj._normalizeGeometry(
-            current + [newNet], connection_points)
-        _trace("add net current={} normalized={}".format(len(current), len(normalized)))
+            current + newNets, connection_points)
+        _trace("add nets current={} added={} normalized={}".format(
+            len(current), len(newNets), len(normalized)))
         cmd = NetGraphCmd(self._ctrl.doc, current, before, normalized)
         self._ctrl.doc.doCommand(cmd)
 
